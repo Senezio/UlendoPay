@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\RateLockController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\KycController;
 use App\Http\Controllers\Api\TopUpController;
+use App\Http\Controllers\Api\WithdrawalController;
 
 Route::prefix('v1')->group(function () {
 
@@ -25,6 +26,7 @@ Route::prefix('v1')->group(function () {
 
     // ── Pawapay webhook — public, secured via signature verification ─────────
     Route::post('/topup/webhook', [TopUpController::class, 'webhook']);
+    Route::post('/withdraw/webhook', [WithdrawalController::class, 'webhook']);
 
     // ── Authenticated routes ─────────────────────────────────────────────────
     Route::middleware('auth:sanctum')->group(function () {
@@ -48,6 +50,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/topup/initiate',         [TopUpController::class, 'initiate']);
         Route::get('/topup/status/{reference}',[TopUpController::class, 'status']);
         Route::get('/topup/history',           [TopUpController::class, 'history']);
+
+        // Withdrawals
+        Route::get('/withdraw/operators',          [WithdrawalController::class, 'operators']);
+        Route::post('/withdraw/initiate',          [WithdrawalController::class, 'initiate']);
+        Route::get('/withdraw/status/{reference}', [WithdrawalController::class, 'status']);
+        Route::get('/withdraw/history',            [WithdrawalController::class, 'history']);
 
         // Recipients
         Route::apiResource('/recipients', RecipientController::class);
