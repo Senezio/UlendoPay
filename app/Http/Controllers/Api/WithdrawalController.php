@@ -14,6 +14,29 @@ class WithdrawalController extends Controller
     public function __construct(private readonly WithdrawalService $withdrawalService) {}
 
     /**
+     * Get supported operators for the authenticated user's currency.
+     */
+    public function operators(Request $request): JsonResponse
+    {
+        $user   = $request->user();
+        $wallet = $user->wallets()->where('status', 'active')->first();
+
+        if (!$wallet) {
+            return response()->json([
+                'message' => 'No active wallet found.',
+                'code'    => 'NO_WALLET',
+            ], 422);
+        }
+
+        $operators = $this->withdrawalService->getSupportedOperators($wallet->currency_code);
+
+        return response()->json([
+            'currency'  => $wallet->currency_code,
+            'operators' => $operators,
+        ]);
+    }
+
+    /**
      * Initiate a withdrawal to mobile money.
      */
     public function initiate(Request $request): JsonResponse
@@ -58,12 +81,12 @@ class WithdrawalController extends Controller
             ->firstOrFail();
 
         return response()->json([
-            'reference'    => $withdrawal->reference,
-            'status'       => $withdrawal->status,
-            'amount'       => $withdrawal->amount,
-            'currency'     => $withdrawal->currency_code,
-            'initiated_at' => $withdrawal->initiated_at,
-            'completed_at' => $withdrawal->completed_at,
+            'reference'      => $withdrawal->reference,
+            'status'         => $withdrawal->status,
+            'amount'         => $withdrawal->amount,
+            'currency'       => $withdrawal->currency_code,
+            'initiated_at'   => $withdrawal->initiated_at,
+            'completed_at'   => $withdrawal->completed_at,
             'failure_reason' => $withdrawal->failure_reason,
         ]);
     }
@@ -94,9 +117,7 @@ class WithdrawalController extends Controller
             'signature' => substr($signature, 0, 20) . '...',
         ]);
 
-        // In sandbox — skip verification
         if (config('app.env') === 'production') {
-            // Reuse same HMAC verification logic as top-up webhook
             if (!$this->verifySignature($request->getContent(), $signature)) {
                 Log::warning('[Withdrawal Webhook] Invalid signature');
                 return response()->json(['message' => 'Signature verification failed.'], 200);
