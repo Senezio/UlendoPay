@@ -1,0 +1,406 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Account;
+use App\Models\OutboxEvent;
+use App\Models\RateLock;
+use App\Models\Recipient;
+use App\Models\Transaction;
+use App\Models\User;
+use App\Services\IdempotencyService;
+use App\Services\LedgerService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Support\Carbon;
+
+class TransactionService
+{
+    public function __construct(
+        private LedgerService      $ledger,
+        private IdempotencyService $idempotency
+    ) {}
+
+    /**
+     * Initiate a transfer.
+     *
+     * This is the entry point from the controller.
+     * It is fully idempotent — safe to retry with same key.
+     *
+     * Steps:
+     *   1. Acquire idempotency lock
+     *   2. Validate inputs
+     *   3. Check sender balance
+     *   4. Create transaction record
+     *   5. Post Group 1 journal entries (escrow)
+     *   6. Queue disbursement via outbox
+     *   7. Release idempotency lock as completed
+     */
+    public function initiate(
+        string    $idempotencyKey,
+        User      $sender,
+        Recipient $recipient,
+        RateLock  $rateLock,
+        float     $sendAmount
+    ): Transaction {
+
+        $payload = [
+            'sender_id'    => $sender->id,
+            'recipient_id' => $recipient->id,
+            'rate_lock_id' => $rateLock->id,
+            'send_amount'  => $sendAmount,
+        ];
+
+        $requestHash = IdempotencyService::hash($idempotencyKey, $payload);
+
+        // ── 1. Acquire idempotency lock ──────────────────────────────────
+        $lock = $this->idempotency->acquire(
+            key:         $idempotencyKey,
+            requestHash: $requestHash,
+            userId:      $sender->id,
+            endpoint:    'transaction.initiate'
+        );
+
+        if ($lock['status'] === 'completed') {
+            // Already processed — return the cached transaction
+            return Transaction::find($lock['response']['transaction_id']);
+        }
+
+        if ($lock['status'] === 'locked') {
+            throw new \RuntimeException('This request is already being processed. Please wait.');
+        }
+
+        if ($lock['status'] === 'conflict') {
+            throw new \RuntimeException('Idempotency key reused with different parameters.');
+        }
+
+        $idempotencyRecord = $lock['record'];
+
+        try {
+            $transaction = DB::transaction(function () use (
+                $sender, $recipient, $rateLock, $sendAmount
+            ) {
+                // ── 2. Validate inputs ───────────────────────────────────
+                if ($rateLock->status !== 'active') {
+                    throw new \RuntimeException('Rate lock is no longer active.');
+                }
+                if ($rateLock->expires_at->isPast()) {
+                    throw new \RuntimeException('Rate lock has expired.');
+                }
+                if ($rateLock->user_id !== $sender->id) {
+                    throw new \RuntimeException('Rate lock does not belong to this user.');
+                }
+                if (! $recipient->is_active || $recipient->user_id !== $sender->id) {
+                    throw new \RuntimeException('Invalid recipient.');
+                }
+
+                $sendCurrency    = $rateLock->from_currency;
+                $receiveCurrency = $rateLock->to_currency;
+                $lockedRate      = $rateLock->locked_rate;
+
+                // Fee calculation
+                $feeAmount           = $this->calculateFee($sendAmount, $rateLock);
+                $guaranteeAmount     = $this->calculateGuarantee($sendAmount, $sendCurrency, $receiveCurrency);
+                $escrowAmount        = $sendAmount - $feeAmount - $guaranteeAmount;
+                $receiveAmount       = round($escrowAmount * $lockedRate, 6);
+
+                if ($escrowAmount <= 0) {
+                    throw new \RuntimeException('Send amount is too small to cover fees.');
+                }
+
+                // ── 3. Check sender balance (with row lock) ──────────────
+                $senderAccount = Account::where('owner_id', $sender->id)
+                    ->where('owner_type', User::class)
+                    ->where('type', 'user_wallet')
+                    ->where('currency_code', $sendCurrency)
+                    ->firstOrFail();
+
+                $balance = (float) $this->ledger->getBalance($senderAccount->id);
+
+                if ($balance < $sendAmount) {
+                    throw new \RuntimeException(
+                        "Insufficient balance. Available: {$balance} {$sendCurrency}, " .
+                        "Required: {$sendAmount} {$sendCurrency}"
+                    );
+                }
+
+                // System accounts
+                $escrowAccount    = Account::where('type', 'escrow')
+                    ->where('currency_code', $sendCurrency)->firstOrFail();
+                $feeAccount       = Account::where('type', 'fee')
+                    ->where('currency_code', $sendCurrency)->firstOrFail();
+                $guaranteeAccount = Account::where('type', 'guarantee')
+                    ->where('corridor', "{$sendCurrency}-{$receiveCurrency}")
+                    ->where('currency_code', $sendCurrency)->firstOrFail();
+
+                // ── 4. Create transaction record ─────────────────────────
+                $reference = $this->generateReference();
+
+                $transaction = Transaction::create([
+                    'reference_number'     => $reference,
+                    'sender_id'            => $sender->id,
+                    'recipient_id'         => $recipient->id,
+                    'rate_lock_id'         => $rateLock->id,
+                    'send_amount'          => $sendAmount,
+                    'send_currency'        => $sendCurrency,
+                    'receive_amount'       => $receiveAmount,
+                    'receive_currency'     => $receiveCurrency,
+                    'locked_rate'          => $lockedRate,
+                    'fee_amount'           => $feeAmount,
+                    'guarantee_contribution' => $guaranteeAmount,
+                    'status'               => 'initiated',
+                ]);
+
+                // ── 5. Post Group 1: Escrow journal entries ──────────────
+                // Debit sender, credit escrow + fee + guarantee
+                $group = $this->ledger->post(
+                    reference:   "TXN-{$reference}-INIT",
+                    type:        'transfer_initiation',
+                    currency:    $sendCurrency,
+                    entries: [
+                        [
+                            'account_id'  => $senderAccount->id,
+                            'type'        => 'debit',
+                            'amount'      => $sendAmount,
+                            'description' => "Transfer initiation {$reference}",
+                        ],
+                        [
+                            'account_id'  => $escrowAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => $escrowAmount,
+                            'description' => "Escrow for {$reference}",
+                        ],
+                        [
+                            'account_id'  => $feeAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => $feeAmount,
+                            'description' => "Fee for {$reference}",
+                        ],
+                        [
+                            'account_id'  => $guaranteeAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => $guaranteeAmount,
+                            'description' => "Guarantee contribution for {$reference}",
+                        ],
+                    ],
+                    description: "Initiation of transfer {$reference}"
+                );
+
+                // ── 6. Link journal group to transaction ─────────────────
+                $transaction->update([
+                    'journal_entry_group_id' => $group->id,
+                    'status'                 => 'escrowed',
+                    'escrowed_at'            => Carbon::now(),
+                ]);
+
+                // Mark rate lock as used
+                $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
+
+                // ── 7. Queue disbursement via outbox ─────────────────────
+                // This decouples DB commit from external partner API call.
+                // The outbox worker picks this up after this transaction commits.
+                OutboxEvent::create([
+                    'event_type'     => 'disbursement_requested',
+                    'transaction_id' => $transaction->id,
+                    'payload'        => [
+                        'transaction_id'  => $transaction->id,
+                        'reference'       => $reference,
+                        'receive_amount'  => $receiveAmount,
+                        'receive_currency' => $receiveCurrency,
+                        'recipient_id'    => $recipient->id,
+                    ],
+                    'status'          => 'pending',
+                    'next_attempt_at' => Carbon::now(),
+                ]);
+
+                return $transaction;
+            });
+
+            // ── Mark idempotency key as completed ────────────────────────
+            $this->idempotency->complete($idempotencyRecord, [
+                'transaction_id'       => $transaction->id,
+                'reference_number'     => $transaction->reference_number,
+                'status'               => $transaction->status,
+                'receive_amount'       => $transaction->receive_amount,
+                'receive_currency'     => $transaction->receive_currency,
+            ], 201);
+
+            return $transaction;
+
+        } catch (\Throwable $e) {
+            $this->idempotency->release($idempotencyRecord);
+            throw $e;
+        }
+    }
+
+    /**
+     * Complete a transaction after partner confirms disbursement.
+     * Called by the outbox worker.
+     *
+     * Posts Group 2: Debit escrow → Credit partner account
+     */
+    public function complete(Transaction $transaction, string $partnerReference): void
+    {
+        DB::transaction(function () use ($transaction, $partnerReference) {
+
+            // Re-fetch with lock to prevent concurrent completion
+            $transaction = Transaction::where('id', $transaction->id)
+                ->whereIn('status', ['escrowed', 'processing', 'retrying'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $escrowAccount  = Account::where('type', 'escrow')
+                ->where('currency_code', $transaction->send_currency)->firstOrFail();
+            $partnerAccount = Account::where('type', 'partner')
+                ->where('owner_id', $transaction->partner_id)
+                ->where('currency_code', $transaction->send_currency)->firstOrFail();
+
+            $escrowAmount = $transaction->send_amount
+                - $transaction->fee_amount
+                - $transaction->guarantee_contribution;
+
+            $this->ledger->post(
+                reference: "TXN-{$transaction->reference_number}-COMPLETE",
+                type:      'transfer_completion',
+                currency:  $transaction->send_currency,
+                entries: [
+                    [
+                        'account_id'  => $escrowAccount->id,
+                        'type'        => 'debit',
+                        'amount'      => $escrowAmount,
+                        'description' => "Escrow release {$transaction->reference_number}",
+                    ],
+                    [
+                        'account_id'  => $partnerAccount->id,
+                        'type'        => 'credit',
+                        'amount'      => $escrowAmount,
+                        'description' => "Partner settlement {$transaction->reference_number}",
+                    ],
+                ]
+            );
+
+            $transaction->update([
+                'status'            => 'completed',
+                'partner_reference' => $partnerReference,
+                'completed_at'      => Carbon::now(),
+            ]);
+
+            // Notify sender via outbox
+            OutboxEvent::create([
+                'event_type'     => 'sms_notification',
+                'transaction_id' => $transaction->id,
+                'payload'        => [
+                    'type'      => 'transfer_completed',
+                    'reference' => $transaction->reference_number,
+                ],
+                'status'          => 'pending',
+                'next_attempt_at' => Carbon::now(),
+            ]);
+        });
+    }
+
+    /**
+     * Reverse a transaction after all disbursement attempts fail.
+     * Called by the outbox worker when max_retries is exhausted.
+     *
+     * Posts Group 3: Debit escrow + guarantee → Credit sender
+     * Fee is NOT refunded (platform kept it for the attempt).
+     */
+    public function reverse(Transaction $transaction, string $reason): void
+    {
+        DB::transaction(function () use ($transaction, $reason) {
+
+            $transaction = Transaction::where('id', $transaction->id)
+                ->whereIn('status', ['escrowed', 'processing', 'retrying', 'refund_pending'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $sendCurrency    = $transaction->send_currency;
+            $receiveCurrency = $transaction->receive_currency;
+
+            $senderAccount    = Account::where('owner_id', $transaction->sender_id)
+                ->where('owner_type', User::class)
+                ->where('type', 'user_wallet')
+                ->where('currency_code', $sendCurrency)->firstOrFail();
+            $escrowAccount    = Account::where('type', 'escrow')
+                ->where('currency_code', $sendCurrency)->firstOrFail();
+            $guaranteeAccount = Account::where('type', 'guarantee')
+                ->where('corridor', "{$sendCurrency}-{$receiveCurrency}")
+                ->where('currency_code', $sendCurrency)->firstOrFail();
+
+            $escrowAmount    = $transaction->send_amount
+                - $transaction->fee_amount
+                - $transaction->guarantee_contribution;
+            $refundAmount    = $escrowAmount + $transaction->guarantee_contribution;
+
+            $this->ledger->post(
+                reference:   "TXN-{$transaction->reference_number}-REVERSAL",
+                type:        'transfer_reversal',
+                currency:    $sendCurrency,
+                entries: [
+                    [
+                        'account_id'  => $escrowAccount->id,
+                        'type'        => 'debit',
+                        'amount'      => $escrowAmount,
+                        'description' => "Reversal escrow release {$transaction->reference_number}",
+                    ],
+                    [
+                        'account_id'  => $guaranteeAccount->id,
+                        'type'        => 'debit',
+                        'amount'      => $transaction->guarantee_contribution,
+                        'description' => "Reversal guarantee return {$transaction->reference_number}",
+                    ],
+                    [
+                        'account_id'  => $senderAccount->id,
+                        'type'        => 'credit',
+                        'amount'      => $refundAmount,
+                        'description' => "Refund for failed transfer {$transaction->reference_number}",
+                    ],
+                ],
+                description: "Reversal: {$reason}"
+            );
+
+            $transaction->update([
+                'status'         => 'refunded',
+                'failure_reason' => $reason,
+                'refunded_at'    => Carbon::now(),
+            ]);
+
+            OutboxEvent::create([
+                'event_type'     => 'sms_notification',
+                'transaction_id' => $transaction->id,
+                'payload'        => [
+                    'type'         => 'transfer_refunded',
+                    'reference'    => $transaction->reference_number,
+                    'refund_amount' => $refundAmount,
+                    'currency'     => $sendCurrency,
+                ],
+                'status'          => 'pending',
+                'next_attempt_at' => Carbon::now(),
+            ]);
+        });
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────
+
+    private function calculateFee(float $amount, RateLock $rateLock): float
+    {
+        $percentFee = round($amount * ($rateLock->fee_percent / 100), 6);
+        return round($percentFee + $rateLock->fee_flat, 6);
+    }
+
+    private function calculateGuarantee(
+        float $amount,
+        string $fromCurrency,
+        string $toCurrency
+    ): float {
+        // 0.5% guarantee contribution — adjust per corridor business rules
+        return round($amount * 0.005, 6);
+    }
+
+    private function generateReference(): string
+    {
+        // Format: ULP-20260408-A3F9K2
+        return 'ULP-' . Carbon::now()->format('Ymd') . '-' . strtoupper(Str::random(6));
+    }
+}
