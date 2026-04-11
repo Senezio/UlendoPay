@@ -1,58 +1,153 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# UlendoPay — Backend API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+UlendoPay is a mobile-first cross-border payments platform built for Africa. This repository contains the Laravel REST API powering the UlendoPay app.
 
-## About Laravel
+## Tech Stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Framework:** Laravel 11 (PHP 8.2+)
+- **Database:** MySQL
+- **Authentication:** Laravel Sanctum (OTP-based, PIN + password)
+- **Payments:** Pawapay (mobile money deposits & payouts)
+- **Architecture:** Double-entry ledger, outbox pattern for SMS notifications
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Features
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- OTP phone verification & 2FA login
+- KYC document submission & verification
+- Multi-currency wallets (MWK, KES, TZS, ZMW, GHS, UGX, RWF, MZN, ETB, XOF)
+- Mobile money top-up via Pawapay Collections API
+- Mobile money withdrawal via Pawapay Payouts API
+- Cross-border remittances with rate locking
+- Recipient management
+- Double-entry bookkeeping via LedgerService
+- Webhook signature verification
+- Audit logging
+- Fraud alerts
+- Rate limiting
 
-## Learning Laravel
+## Supported Corridors
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+| Country | Currency | Operators |
+|---------|----------|-----------|
+| Malawi | MWK | Airtel, TNM, TNM Mpamba |
+| Kenya | KES | M-Pesa, Airtel |
+| Tanzania | TZS | Vodacom, Airtel, Tigo, Halotel |
+| Zambia | ZMW | Airtel, MTN, Zamtel |
+| Ghana | GHS | MTN, Vodafone, AirtelTigo |
+| Uganda | UGX | MTN, Airtel |
+| Rwanda | RWF | MTN, Airtel |
+| Mozambique | MZN | Vodacom, Movitel |
+| Ethiopia | ETB | Telebirr, M-Pesa |
+| Senegal | XOF | Orange, Free, Wave |
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## API Endpoints
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+### Auth
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/register` | Register new user |
+| POST | `/api/v1/auth/verify-phone` | Verify phone with OTP |
+| POST | `/api/v1/auth/login` | Login with PIN/password |
+| POST | `/api/v1/auth/verify-login` | Verify login OTP |
+| POST | `/api/v1/auth/logout` | Logout |
+| GET | `/api/v1/auth/me` | Get authenticated user |
 
-## Agentic Development
+### Wallets
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/wallets` | List user wallets |
+| GET | `/api/v1/wallets/{currency}` | Get wallet by currency |
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### Top-Up
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/topup/operators` | Get supported operators |
+| POST | `/api/v1/topup/initiate` | Initiate mobile money deposit |
+| GET | `/api/v1/topup/status/{reference}` | Poll top-up status |
+| GET | `/api/v1/topup/history` | Top-up history |
+| POST | `/api/v1/topup/webhook` | Pawapay deposit webhook (public) |
+
+### Withdrawals
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/withdraw/operators` | Get supported operators |
+| POST | `/api/v1/withdraw/initiate` | Initiate mobile money payout |
+| GET | `/api/v1/withdraw/status/{reference}` | Poll withdrawal status |
+| GET | `/api/v1/withdraw/history` | Withdrawal history |
+| POST | `/api/v1/withdraw/webhook` | Pawapay payout webhook (public) |
+
+### Transactions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/transactions` | Create cross-border transaction |
+| GET | `/api/v1/transactions` | List transactions |
+| GET | `/api/v1/transactions/{reference}` | Get transaction by reference |
+
+### Recipients
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/recipients` | List recipients |
+| POST | `/api/v1/recipients` | Add recipient |
+| GET | `/api/v1/recipients/{id}` | Get recipient |
+| PUT | `/api/v1/recipients/{id}` | Update recipient |
+| DELETE | `/api/v1/recipients/{id}` | Delete recipient |
+
+### KYC
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/kyc/status` | Get KYC status |
+| POST | `/api/v1/kyc/submit` | Submit KYC documents |
+
+## Getting Started
+
+### Requirements
+
+- PHP 8.2+
+- MySQL 8.0+
+- Composer
+
+### Installation
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone git@github.com:Senezio/UlendoPay.git
+cd UlendoPay
+composer install
+cp .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Configure your `.env`:
 
-## Contributing
+```env
+DB_DATABASE=ulendopay
+DB_USERNAME=your_db_user
+DB_PASSWORD=your_db_password
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+PAWAPAY_BASE_URL=https://api.sandbox.pawapay.io
+PAWAPAY_API_TOKEN=your_pawapay_token
+PAWAPAY_TIMEOUT=30
+```
 
-## Code of Conduct
+Run migrations:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan migrate
+php artisan optimize
+```
 
-## Security Vulnerabilities
+## Environment
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+| Variable | Description |
+|----------|-------------|
+| `PAWAPAY_BASE_URL` | Pawapay API base URL (sandbox or production) |
+| `PAWAPAY_API_TOKEN` | Pawapay JWT token |
+| `PAWAPAY_TIMEOUT` | HTTP timeout in seconds (default: 30) |
+
+## Frontend
+
+The Vue/Nuxt frontend is maintained in a separate repository:
+[ulendopay-web](https://github.com/Senezio/ulendopay-web)
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Proprietary — All rights reserved © UlendoPay
