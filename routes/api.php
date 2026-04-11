@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\KycController;
 use App\Http\Controllers\Api\TopUpController;
 use App\Http\Controllers\Api\WithdrawalController;
+use App\Http\Controllers\Api\AdminController;
 
 Route::prefix('v1')->group(function () {
 
@@ -24,8 +25,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/reset-password',  [AuthController::class, 'resetPassword']);
     });
 
-    // ── Pawapay webhook — public, secured via signature verification ─────────
-    Route::post('/topup/webhook', [TopUpController::class, 'webhook']);
+    // ── Webhooks — public, secured via signature verification ────────────────
+    Route::post('/topup/webhook',    [TopUpController::class, 'webhook']);
     Route::post('/withdraw/webhook', [WithdrawalController::class, 'webhook']);
 
     // ── Authenticated routes ─────────────────────────────────────────────────
@@ -46,10 +47,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/wallets/{currency}', [WalletController::class, 'show']);
 
         // Top-up
-        Route::get('/topup/operators',         [TopUpController::class, 'operators']);
-        Route::post('/topup/initiate',         [TopUpController::class, 'initiate']);
-        Route::get('/topup/status/{reference}',[TopUpController::class, 'status']);
-        Route::get('/topup/history',           [TopUpController::class, 'history']);
+        Route::get('/topup/operators',          [TopUpController::class, 'operators']);
+        Route::post('/topup/initiate',          [TopUpController::class, 'initiate']);
+        Route::get('/topup/status/{reference}', [TopUpController::class, 'status']);
+        Route::get('/topup/history',            [TopUpController::class, 'history']);
 
         // Withdrawals
         Route::get('/withdraw/operators',          [WithdrawalController::class, 'operators']);
@@ -68,5 +69,50 @@ Route::prefix('v1')->group(function () {
         Route::post('/transactions',            [TransactionController::class, 'store']);
         Route::get('/transactions',             [TransactionController::class, 'index']);
         Route::get('/transactions/{reference}', [TransactionController::class, 'show']);
+
+        // ── Admin routes ─────────────────────────────────────────────────────
+        Route::prefix('admin')->middleware('admin')->group(function () {
+
+            // Dashboard
+            Route::get('/stats', [AdminController::class, 'stats']);
+
+            // KYC
+            Route::get('/kyc/queue',             [AdminController::class, 'kycQueue']);
+            Route::get('/kyc/{id}',              [AdminController::class, 'kycShow']);
+            Route::post('/kyc/{id}/approve',     [AdminController::class, 'kycApprove'])
+                ->middleware('admin:super_admin,kyc_reviewer');
+            Route::post('/kyc/{id}/reject',      [AdminController::class, 'kycReject'])
+                ->middleware('admin:super_admin,kyc_reviewer');
+
+            // Users
+            Route::get('/users',                 [AdminController::class, 'users']);
+            Route::get('/users/{id}',            [AdminController::class, 'userShow']);
+            Route::post('/users/{id}/suspend',   [AdminController::class, 'userSuspend'])
+                ->middleware('admin:super_admin,finance_officer');
+            Route::post('/users/{id}/restore',   [AdminController::class, 'userRestore'])
+                ->middleware('admin:super_admin');
+
+            // Transactions
+            Route::get('/transactions',                    [AdminController::class, 'transactions']);
+            Route::get('/transactions/{reference}',        [AdminController::class, 'transactionShow']);
+
+            // Exchange rates
+            Route::get('/rates',                           [AdminController::class, 'rates']);
+            Route::post('/rates/fetch',                    [AdminController::class, 'fetchRates'])
+                ->middleware('admin:super_admin');
+
+            // Fraud alerts
+            Route::get('/fraud-alerts',                    [AdminController::class, 'fraudAlerts']);
+            Route::post('/fraud-alerts/{id}/clear',        [AdminController::class, 'fraudAlertClear'])
+                ->middleware('admin:super_admin,finance_officer');
+            Route::post('/fraud-alerts/{id}/confirm',      [AdminController::class, 'fraudAlertConfirm'])
+                ->middleware('admin:super_admin,finance_officer');
+
+            // Staff management — super_admin only
+            Route::get('/staff',                           [AdminController::class, 'staffList'])
+                ->middleware('admin:super_admin');
+            Route::post('/staff',                          [AdminController::class, 'staffCreate'])
+                ->middleware('admin:super_admin');
+        });
     });
 });

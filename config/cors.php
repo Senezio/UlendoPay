@@ -50,7 +50,8 @@ return [
     | When the custom domain is live, add it here alongside Netlify.
     */
     'allowed_origins' => [
-        'https://ulendopay.netlify.app',    // Production — Netlify
+        'https://ulendopay.netlify.app',
+        'https://payulendo.netlify.app',    // Production — Netlify
         'http://localhost:5173',             // Vite dev server default
         'http://localhost:3000',             // Alternative dev port
         'http://127.0.0.1:5173',            // Vite via 127.0.0.1

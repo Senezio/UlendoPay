@@ -462,6 +462,8 @@ class AuthController extends Controller
             'country_code'     => $user->country_code,
             'kyc_status'       => $user->kyc_status,
             'status'           => $user->status,
+            'is_staff'         => (bool) $user->is_staff,
+            'role'             => $user->role,
             'phone_verified'   => $user->isPhoneVerified(),
             'has_pin'          => !is_null($user->pin),
             'has_password'     => !is_null($user->password),
