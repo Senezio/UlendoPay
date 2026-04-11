@@ -36,7 +36,7 @@ return new class extends Migration {
             ]);
             $table->string('delivery_phone', 20);
             $table->boolean('is_used')->default(false);
-            $table->timestamp('expires_at');
+            $table->timestamp('expires_at')->default('2000-01-01 00:00:00');
             $table->timestamp('used_at')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
