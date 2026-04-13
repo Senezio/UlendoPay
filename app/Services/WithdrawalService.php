@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
+
 class WithdrawalService
 {
     private string $baseUrl;
@@ -62,6 +63,7 @@ class WithdrawalService
         'NGN:AIRTEL'      => 'AIRTEL_NGA',
         // Cameroon
         'XAF:MTN'         => 'MTN_MOMO_CMR',
+        'ZAR:MTN'         => 'MTN_MOMO_ZAF',
         'XAF:ORANGE'      => 'ORANGE_CMR',
         // DRC
         'CDF:VODACOM'     => 'VODACOM_COD',
@@ -117,6 +119,42 @@ class WithdrawalService
             throw new \RuntimeException(
                 "Insufficient balance. Available: {$currency} " . number_format($balance, 2)
             );
+        }
+
+        // Route to MTN MoMo for supported currencies
+        $mtnMomo = new MtnMomoService();
+        if ($mtnMomo->supportsCurrency($currency)) {
+            $countryCode = $user->country_code ?? $this->currencyToCountry($currency);
+            $withdrawal = DB::transaction(function () use ($user, $wallet, $amount, $currency, $phoneNumber, $mobileOperator, $countryCode) {
+                $userAccount = Account::where('code', "USR-{$user->id}-{$currency}")->lockForUpdate()->firstOrFail();
+                $systemAccount = Account::where('code', "{$currency}-POOL")->lockForUpdate()->firstOrFail();
+                $withdrawal = Withdrawal::create([
+                    'reference'       => Withdrawal::generateReference(),
+                    'user_id'         => $user->id,
+                    'wallet_id'       => $wallet->id,
+                    'amount'          => $amount,
+                    'currency_code'   => $currency,
+                    'phone_number'    => $phoneNumber,
+                    'mobile_operator' => $mobileOperator,
+                    'country_code'    => $countryCode,
+                    'correspondent'   => 'MTN_MOMO',
+                    'status'          => 'initiated',
+                    'initiated_at'    => now(),
+                ]);
+                app(LedgerService::class)->post(
+                    reference: "WDR-{$withdrawal->reference}",
+                    type: 'adjustment',
+                    currency: $currency,
+                    entries: [
+                        ['account_id' => $userAccount->id,   'type' => 'debit',  'amount' => $amount, 'description' => "Withdrawal: {$withdrawal->reference}"],
+                        ['account_id' => $systemAccount->id, 'type' => 'credit', 'amount' => $amount, 'description' => "Withdrawal held: {$withdrawal->reference}"],
+                    ],
+                    description: "MTN MoMo withdrawal: {$withdrawal->reference}"
+                );
+                return $withdrawal;
+            });
+            $mtnMomo->initiateWithdrawal($user, $phoneNumber, $amount, $currency, $withdrawal);
+            return $withdrawal->fresh();
         }
 
         // Resolve Pawapay correspondent

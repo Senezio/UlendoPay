@@ -75,7 +75,9 @@ Route::prefix('v1')->group(function () {
 
             // Dashboard
             Route::get('/stats', [AdminController::class, 'stats']);
+            Route::get('/analytics', [AdminController::class, 'analytics']);
 
+            Route::get("/accounts", [AdminController::class, "accounts"]);
             // KYC
             Route::get('/kyc/queue',             [AdminController::class, 'kycQueue']);
             Route::get('/kyc/{id}',              [AdminController::class, 'kycShow']);
@@ -99,6 +101,15 @@ Route::prefix('v1')->group(function () {
             // Exchange rates
             Route::get('/rates',                           [AdminController::class, 'rates']);
             Route::post('/rates/fetch',                    [AdminController::class, 'fetchRates'])
+                ->middleware('admin:super_admin');
+
+            // Partner management
+            Route::get('/partners',                        [AdminController::class, 'partners']);
+            Route::post('/partners/{id}/toggle',           [AdminController::class, 'partnerToggle'])
+                ->middleware('admin:super_admin');
+            Route::put('/corridors/{id}',                  [AdminController::class, 'corridorUpdate'])
+                ->middleware('admin:super_admin');
+            Route::post('/corridors/{id}/toggle',          [AdminController::class, 'corridorToggle'])
                 ->middleware('admin:super_admin');
 
             // Fraud alerts

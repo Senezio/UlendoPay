@@ -6,7 +6,8 @@ class Partner extends Model
 {
     protected $fillable = [
         'name','code','type','country_code','api_config',
-        'timeout_seconds','max_retries','retry_delay_seconds','is_active'
+        'timeout_seconds','max_retries','retry_delay_seconds',
+        'success_rate','avg_response_time_ms','is_active'
     ];
     protected $casts = [
         'api_config' => 'encrypted:array', // encrypted at rest

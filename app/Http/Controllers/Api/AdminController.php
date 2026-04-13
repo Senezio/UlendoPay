@@ -11,6 +11,7 @@ use App\Models\ExchangeRate;
 use App\Models\FraudAlert;
 use App\Models\AuditLog;
 use App\Services\KycService;
+use App\Models\Partner;
 use App\Services\RateEngine;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -84,8 +85,16 @@ class AdminController extends Controller
     {
         $record = KycRecord::with('user')->findOrFail($id);
 
+        try {
+            $documentUrl = $this->kycService->getSecureUrl($record);
+        } catch (\Throwable $e) {
+            $documentUrl = null;
+        }
+
         return response()->json([
-            'record' => $record,
+            'record' => array_merge($record->toArray(), [
+                'document_url' => $documentUrl,
+            ]),
             'user'   => [
                 'id'           => $record->user->id,
                 'name'         => $record->user->name,
@@ -445,4 +454,198 @@ class AdminController extends Controller
             'user'    => $user->only(['id', 'name', 'email', 'role']),
         ], 201);
     }
+
+    // ── Analytics ─────────────────────────────────────────────────────────
+
+    public function analytics(Request $request): JsonResponse
+    {
+        $days = (int) $request->input('days', 30);
+        $days = min(max($days, 7), 90); // clamp between 7 and 90 days
+
+        $labels       = [];
+        $transactions = [];
+        $volume       = [];
+        $revenue      = [];
+        $topups       = [];
+
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $date = now()->subDays($i)->toDateString();
+            $labels[] = now()->subDays($i)->format('M j');
+
+            $txCount = Transaction::whereDate('created_at', $date)->count();
+            $txVol   = (float) Transaction::whereDate('created_at', $date)
+                ->where('status', 'completed')
+                ->sum('send_amount');
+            $rev     = (float) \App\Models\JournalEntry::whereHas('account', fn($q) => $q->where('type', 'fee'))
+                ->where('entry_type', 'credit')
+                ->whereDate('posted_at', $date)
+                ->sum('amount');
+            $tpCount = \App\Models\TopUp::whereDate('created_at', $date)
+                ->where('status', 'completed')
+                ->count();
+
+            $transactions[] = $txCount;
+            $volume[]       = round($txVol, 2);
+            $revenue[]      = round($rev, 2);
+            $topups[]       = $tpCount;
+        }
+
+        // Corridor breakdown
+        $corridors = Transaction::where('status', 'completed')
+            ->selectRaw('send_currency, receive_currency, COUNT(*) as count, SUM(send_amount) as volume')
+            ->groupBy('send_currency', 'receive_currency')
+            ->orderByDesc('count')
+            ->limit(10)
+            ->get();
+
+        // Account balances
+        $accounts = \App\Models\Account::whereIn('type', ['fee', 'guarantee', 'escrow'])
+            ->with('balance')
+            ->get()
+            ->map(fn($a) => [
+                'code'     => $a->code,
+                'type'     => $a->type,
+                'currency' => $a->currency_code,
+                'balance'  => (float) ($a->balance?->balance ?? 0),
+            ]);
+
+        return response()->json([
+            'period'       => $days,
+            'labels'       => $labels,
+            'transactions' => $transactions,
+            'volume'       => $volume,
+            'revenue'      => $revenue,
+            'topups'       => $topups,
+            'corridors'    => $corridors,
+            'accounts'     => $accounts,
+        ]);
+    }
+
+    public function accounts(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $accounts = \App\Models\Account::whereIn("type", ["fee", "guarantee", "escrow"])
+            ->with("balance")
+            ->get()
+            ->map(fn($a) => [
+                "id"       => $a->id,
+                "code"     => $a->code,
+                "type"     => $a->type,
+                "currency" => $a->currency_code,
+                "balance"  => (float) ($a->balance?->balance ?? 0),
+            ]);
+
+        return response()->json(["accounts" => $accounts]);
+    }
+
+    // ── Partner Management ────────────────────────────────────────────────────
+
+    /**
+     * List all partners with their corridors and stats.
+     */
+    public function partners(Request $request): JsonResponse
+    {
+        $partners = Partner::with('corridors')->get()->map(function ($partner) {
+            return [
+                'id'                   => $partner->id,
+                'name'                 => $partner->name,
+                'code'                 => $partner->code,
+                'type'                 => $partner->type,
+                'country_code'         => $partner->country_code,
+                'is_active'            => $partner->is_active,
+                'success_rate'         => $partner->success_rate,
+                'avg_response_time_ms' => $partner->avg_response_time_ms,
+                'timeout_seconds'      => $partner->timeout_seconds,
+                'max_retries'          => $partner->max_retries,
+                'corridors'            => $partner->corridors->map(fn($c) => [
+                    'id'            => $c->id,
+                    'from_currency' => $c->from_currency,
+                    'to_currency'   => $c->to_currency,
+                    'min_amount'    => $c->min_amount,
+                    'max_amount'    => $c->max_amount,
+                    'fee_percent'   => $c->fee_percent,
+                    'fee_flat'      => $c->fee_flat,
+                    'priority'      => $c->priority,
+                    'is_active'     => $c->is_active,
+                ]),
+            ];
+        });
+
+        return response()->json(['partners' => $partners]);
+    }
+
+    /**
+     * Toggle partner active status.
+     */
+    public function partnerToggle(Request $request, int $id): JsonResponse
+    {
+        $partner = Partner::findOrFail($id);
+        $partner->update(['is_active' => !$partner->is_active]);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => $partner->is_active ? 'partner.enabled' : 'partner.disabled',
+            'entity_type' => 'Partner',
+            'entity_id'   => $partner->id,
+            'new_values'  => ['is_active' => $partner->is_active],
+        ]);
+
+        return response()->json([
+            'message'   => 'Partner updated.',
+            'is_active' => $partner->is_active,
+        ]);
+    }
+
+    /**
+     * Update corridor settings — fees, limits, active status.
+     */
+    public function corridorUpdate(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'fee_percent' => 'sometimes|numeric|min:0|max:100',
+            'fee_flat'    => 'sometimes|numeric|min:0',
+            'min_amount'  => 'sometimes|numeric|min:0',
+            'max_amount'  => 'sometimes|numeric|min:0',
+            'is_active'   => 'sometimes|boolean',
+            'priority'    => 'sometimes|integer|min:1',
+        ]);
+
+        $corridor = PartnerCorridor::findOrFail($id);
+        $corridor->update($data);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'corridor.updated',
+            'entity_type' => 'PartnerCorridor',
+            'entity_id'   => $corridor->id,
+            'new_values'  => $data,
+        ]);
+
+        return response()->json([
+            'message'  => 'Corridor updated.',
+            'corridor' => $corridor->fresh(),
+        ]);
+    }
+
+    /**
+     * Toggle corridor active status.
+     */
+    public function corridorToggle(Request $request, int $id): JsonResponse
+    {
+        $corridor = PartnerCorridor::with('partner')->findOrFail($id);
+        $corridor->update(['is_active' => !$corridor->is_active]);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => $corridor->is_active ? 'corridor.enabled' : 'corridor.disabled',
+            'entity_type' => 'PartnerCorridor',
+            'entity_id'   => $corridor->id,
+            'new_values'  => ['is_active' => $corridor->is_active],
+        ]);
+
+        return response()->json([
+            'message'   => 'Corridor updated.',
+            'is_active' => $corridor->is_active,
+        ]);
+    }
+
 }

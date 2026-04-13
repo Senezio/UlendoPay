@@ -53,3 +53,12 @@ Schedule::command('idempotency:prune')
     ->onFailure(function () {
         Log::error('[scheduler] idempotency:prune FAILED');
     });
+
+// ── Expire unclaimed pending transfers ───────────────────────────────────────
+// Runs every hour — refunds transfers not claimed within 48 hours
+Schedule::command('claims:expire')
+    ->hourly()
+    ->withoutOverlapping()
+    ->onFailure(function () {
+        Log::error('[scheduler] claims:expire FAILED');
+    });

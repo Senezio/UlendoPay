@@ -1,0 +1,1480 @@
+openapi: 3.0.3
+info:
+  title: 'UlendoPay API Documentation'
+  description: ''
+  version: 1.0.0
+servers:
+  -
+    url: 'http://ulendopay.malawihire.com'
+tags:
+  -
+    name: Endpoints
+    description: ''
+paths:
+  /api/v1/auth/register:
+    post:
+      summary: 'Step 1 of registration — create account, send phone OTP.'
+      operationId: step1OfRegistrationCreateAccountSendPhoneOTP
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: b
+                phone:
+                  type: string
+                  description: 'Must not be greater than 20 characters.'
+                  example: ngzmiyvdljnikhwa
+                country_code:
+                  type: string
+                  description: 'Must be 3 characters.'
+                  example: ykc
+                pin:
+                  type: string
+                  description: 'Must match the regex /^\d{4}$/. Must be 4 characters.'
+                  example: myuw
+                email:
+                  type: string
+                  description: 'Must be a valid email address.'
+                  example: theo.hauck@example.com
+                  nullable: true
+                password:
+                  type: string
+                  description: ''
+                  example: null
+                  nullable: true
+              required:
+                - name
+                - phone
+                - country_code
+                - pin
+      security: []
+  /api/v1/auth/verify-phone:
+    post:
+      summary: 'Step 2 of registration — verify phone with OTP.'
+      operationId: step2OfRegistrationVerifyPhoneWithOTP
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the users table.'
+                  example: 16
+                otp:
+                  type: string
+                  description: 'Must be 6 characters.'
+                  example: ngzmiy
+              required:
+                - user_id
+                - otp
+      security: []
+  /api/v1/auth/login:
+    post:
+      summary: 'Step 1 of login — verify credentials, send 2FA OTP.'
+      operationId: step1OfLoginVerifyCredentialsSend2FAOTP
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                method:
+                  type: string
+                  description: ''
+                  example: phone_pin
+                  enum:
+                    - phone_pin
+                    - email_password
+                phone:
+                  type: string
+                  description: 'This field is required when <code>method</code> is <code>phone_pin</code>.'
+                  example: architecto
+                  nullable: true
+                pin:
+                  type: string
+                  description: 'This field is required when <code>method</code> is <code>phone_pin</code>. Must be 4 characters.'
+                  example: ngzm
+                  nullable: true
+                email:
+                  type: string
+                  description: 'This field is required when <code>method</code> is <code>email_password</code>. Must be a valid email address.'
+                  example: gulgowski.asia@example.com
+                  nullable: true
+                password:
+                  type: string
+                  description: 'This field is required when <code>method</code> is <code>email_password</code>.'
+                  example: '|]|{+-'
+                  nullable: true
+              required:
+                - method
+      security: []
+  /api/v1/auth/verify-login:
+    post:
+      summary: 'Step 2 of login — verify 2FA OTP, issue token.'
+      operationId: step2OfLoginVerify2FAOTPIssueToken
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                  description: 'The <code>id</code> of an existing record in the users table.'
+                  example: 16
+                otp:
+                  type: string
+                  description: 'Must be 6 characters.'
+                  example: ngzmiy
+              required:
+                - user_id
+                - otp
+      security: []
+  /api/v1/auth/forgot-pin:
+    post:
+      summary: ''
+      operationId: postApiV1AuthForgotPin
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                  description: 'Must not be greater than 20 characters.'
+                  example: bngzmiyvdljnikhw
+              required:
+                - phone
+      security: []
+  /api/v1/auth/reset-pin:
+    post:
+      summary: ''
+      operationId: postApiV1AuthResetPin
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                  description: 'Must not be greater than 20 characters.'
+                  example: bngzmiyvdljnikhw
+                otp:
+                  type: string
+                  description: 'Must be 6 characters.'
+                  example: aykcmy
+                pin:
+                  type: string
+                  description: 'Must match the regex /^\d{4}$/. Must be 4 characters.'
+                  example: uwpw
+              required:
+                - phone
+                - otp
+                - pin
+      security: []
+  /api/v1/auth/forgot-password:
+    post:
+      summary: ''
+      operationId: postApiV1AuthForgotPassword
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: 'Must be a valid email address.'
+                  example: gbailey@example.net
+              required:
+                - email
+      security: []
+  /api/v1/auth/reset-password:
+    post:
+      summary: ''
+      operationId: postApiV1AuthResetPassword
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: 'Must be a valid email address.'
+                  example: gbailey@example.net
+                otp:
+                  type: string
+                  description: 'Must be 6 characters.'
+                  example: miyvdl
+                password:
+                  type: string
+                  description: ''
+                  example: architecto
+              required:
+                - email
+                - otp
+                - password
+      security: []
+  /api/v1/topup/webhook:
+    post:
+      summary: 'Pawapay webhook — receives deposit status updates.'
+      operationId: pawapayWebhookReceivesDepositStatusUpdates
+      description: "This endpoint is PUBLIC — no auth middleware.\nSecurity is via webhook signature verification."
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/withdraw/webhook:
+    post:
+      summary: 'Pawapay payout webhook — receives payout status updates.'
+      operationId: pawapayPayoutWebhookReceivesPayoutStatusUpdates
+      description: 'PUBLIC endpoint — secured via signature verification.'
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/auth/logout:
+    post:
+      summary: ''
+      operationId: postApiV1AuthLogout
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/auth/me:
+    get:
+      summary: ''
+      operationId: getApiV1AuthMe
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/kyc/status:
+    get:
+      summary: 'Get current KYC status and submission history.'
+      operationId: getCurrentKYCStatusAndSubmissionHistory
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/kyc/submit:
+    post:
+      summary: 'Submit a KYC document for review.'
+      operationId: submitAKYCDocumentForReview
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                document_type:
+                  type: string
+                  description: ''
+                  example: national_id
+                  enum:
+                    - passport
+                    - national_id
+                    - drivers_license
+                    - utility_bill
+                document_number:
+                  type: string
+                  description: 'Must not be greater than 50 characters.'
+                  example: b
+                  nullable: true
+                document:
+                  type: string
+                  format: binary
+                  description: 'Must be a file. Must not be greater than 15360 kilobytes.'
+              required:
+                - document_type
+                - document
+      security: []
+  '/api/v1/kyc/document/{id}':
+    get:
+      summary: 'Serve a KYC document securely via signed token.'
+      operationId: serveAKYCDocumentSecurelyViaSignedToken
+      description: 'Only accessible to the document owner or admins.'
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the document.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/wallets:
+    get:
+      summary: ''
+      operationId: getApiV1Wallets
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  '/api/v1/wallets/{currency}':
+    get:
+      summary: ''
+      operationId: getApiV1WalletsCurrency
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: currency
+        description: ''
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/topup/operators:
+    get:
+      summary: "Get supported operators for the authenticated user's currency."
+      operationId: getSupportedOperatorsForTheAuthenticatedUsersCurrency
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/topup/initiate:
+    post:
+      summary: "Initiate a top-up — triggers USSD prompt on user's phone."
+      operationId: initiateATopUpTriggersUSSDPromptOnUsersPhone
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone_number:
+                  type: string
+                  description: 'Must not be greater than 20 characters.'
+                  example: bngzmiyvdljnikhw
+                mobile_operator:
+                  type: string
+                  description: 'Must not be greater than 50 characters.'
+                  example: a
+                amount:
+                  type: number
+                  description: 'Must be at least 1.'
+                  example: 79
+              required:
+                - phone_number
+                - mobile_operator
+                - amount
+      security: []
+  '/api/v1/topup/status/{reference}':
+    get:
+      summary: 'Get top-up status by reference.'
+      operationId: getTopUpStatusByReference
+      description: 'Frontend polls this after initiating to check if payment was confirmed.'
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: reference
+        description: ''
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/topup/history:
+    get:
+      summary: 'Get top-up history for authenticated user.'
+      operationId: getTopUpHistoryForAuthenticatedUser
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/withdraw/operators:
+    get:
+      summary: "Get supported operators for the authenticated user's currency."
+      operationId: getSupportedOperatorsForTheAuthenticatedUsersCurrency
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/withdraw/initiate:
+    post:
+      summary: 'Initiate a withdrawal to mobile money.'
+      operationId: initiateAWithdrawalToMobileMoney
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone_number:
+                  type: string
+                  description: 'Must not be greater than 20 characters.'
+                  example: bngzmiyvdljnikhw
+                mobile_operator:
+                  type: string
+                  description: 'Must not be greater than 50 characters.'
+                  example: a
+                amount:
+                  type: number
+                  description: 'Must be at least 1.'
+                  example: 79
+              required:
+                - phone_number
+                - mobile_operator
+                - amount
+      security: []
+  '/api/v1/withdraw/status/{reference}':
+    get:
+      summary: 'Get withdrawal status by reference.'
+      operationId: getWithdrawalStatusByReference
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: reference
+        description: ''
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/withdraw/history:
+    get:
+      summary: 'Get withdrawal history for authenticated user.'
+      operationId: getWithdrawalHistoryForAuthenticatedUser
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/recipients:
+    get:
+      summary: ''
+      operationId: getApiV1Recipients
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    post:
+      summary: ''
+      operationId: postApiV1Recipients
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: b
+                phone:
+                  type: string
+                  description: 'Must not be greater than 20 characters.'
+                  example: ngzmiyvdljnikhwa
+                  nullable: true
+                country_code:
+                  type: string
+                  description: 'Must be 3 characters.'
+                  example: ykc
+                payment_method:
+                  type: string
+                  description: ''
+                  example: cash_pickup
+                  enum:
+                    - mobile_money
+                    - bank_transfer
+                    - cash_pickup
+                mobile_network:
+                  type: string
+                  description: 'This field is required when <code>payment_method</code> is <code>mobile_money</code>.'
+                  example: architecto
+                  nullable: true
+                mobile_number:
+                  type: string
+                  description: 'This field is required when <code>payment_method</code> is <code>mobile_money</code>.'
+                  example: architecto
+                  nullable: true
+                bank_name:
+                  type: string
+                  description: 'This field is required when <code>payment_method</code> is <code>bank_transfer</code>.'
+                  example: architecto
+                  nullable: true
+                bank_account_number:
+                  type: string
+                  description: 'This field is required when <code>payment_method</code> is <code>bank_transfer</code>.'
+                  example: architecto
+                  nullable: true
+                bank_branch_code:
+                  type: string
+                  description: ''
+                  example: architecto
+                  nullable: true
+              required:
+                - full_name
+                - country_code
+                - payment_method
+      security: []
+  '/api/v1/recipients/{id}':
+    get:
+      summary: ''
+      operationId: getApiV1RecipientsId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    put:
+      summary: ''
+      operationId: putApiV1RecipientsId
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: b
+                phone:
+                  type: string
+                  description: 'Must not be greater than 20 characters.'
+                  example: ngzmiyvdljnikhwa
+                  nullable: true
+                mobile_network:
+                  type: string
+                  description: ''
+                  example: architecto
+                  nullable: true
+                mobile_number:
+                  type: string
+                  description: ''
+                  example: architecto
+                  nullable: true
+                bank_name:
+                  type: string
+                  description: ''
+                  example: architecto
+                  nullable: true
+                bank_account_number:
+                  type: string
+                  description: ''
+                  example: architecto
+                  nullable: true
+                bank_branch_code:
+                  type: string
+                  description: ''
+                  example: architecto
+                  nullable: true
+      security: []
+    delete:
+      summary: ''
+      operationId: deleteApiV1RecipientsId
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the recipient.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/rate-locks:
+    post:
+      summary: ''
+      operationId: postApiV1RateLocks
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from_currency:
+                  type: string
+                  description: 'Must be 3 characters.'
+                  example: bng
+                to_currency:
+                  type: string
+                  description: 'Must be 3 characters.'
+                  example: zmi
+                send_amount:
+                  type: number
+                  description: 'Must be at least 1.'
+                  example: 43
+              required:
+                - from_currency
+                - to_currency
+                - send_amount
+      security: []
+  '/api/v1/rate-locks/{id}':
+    get:
+      summary: ''
+      operationId: getApiV1RateLocksId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the rate lock.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/transactions:
+    post:
+      summary: ''
+      operationId: postApiV1Transactions
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: b
+                rate_lock_id:
+                  type: integer
+                  description: ''
+                  example: 16
+                recipient_id:
+                  type: integer
+                  description: ''
+                  example: 16
+                send_amount:
+                  type: number
+                  description: 'Must be at least 1.'
+                  example: 22
+              required:
+                - idempotency_key
+                - rate_lock_id
+                - recipient_id
+                - send_amount
+      security: []
+    get:
+      summary: ''
+      operationId: getApiV1Transactions
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  '/api/v1/transactions/{reference}':
+    get:
+      summary: ''
+      operationId: getApiV1TransactionsReference
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: reference
+        description: ''
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/admin/stats:
+    get:
+      summary: ''
+      operationId: getApiV1AdminStats
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/admin/analytics:
+    get:
+      summary: ''
+      operationId: getApiV1AdminAnalytics
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/admin/kyc/queue:
+    get:
+      summary: ''
+      operationId: getApiV1AdminKycQueue
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  '/api/v1/admin/kyc/{id}':
+    get:
+      summary: ''
+      operationId: getApiV1AdminKycId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the kyc.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/api/v1/admin/kyc/{id}/approve':
+    post:
+      summary: ''
+      operationId: postApiV1AdminKycIdApprove
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the kyc.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/api/v1/admin/kyc/{id}/reject':
+    post:
+      summary: ''
+      operationId: postApiV1AdminKycIdReject
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 'Must not be greater than 500 characters.'
+                  example: b
+              required:
+                - reason
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the kyc.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/admin/users:
+    get:
+      summary: ''
+      operationId: getApiV1AdminUsers
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  '/api/v1/admin/users/{id}':
+    get:
+      summary: ''
+      operationId: getApiV1AdminUsersId
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the user.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/api/v1/admin/users/{id}/suspend':
+    post:
+      summary: ''
+      operationId: postApiV1AdminUsersIdSuspend
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: 'Must not be greater than 500 characters.'
+                  example: b
+              required:
+                - reason
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the user.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/api/v1/admin/users/{id}/restore':
+    post:
+      summary: ''
+      operationId: postApiV1AdminUsersIdRestore
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the user.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/admin/transactions:
+    get:
+      summary: ''
+      operationId: getApiV1AdminTransactions
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  '/api/v1/admin/transactions/{reference}':
+    get:
+      summary: ''
+      operationId: getApiV1AdminTransactionsReference
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: reference
+        description: ''
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/admin/rates:
+    get:
+      summary: ''
+      operationId: getApiV1AdminRates
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/admin/rates/fetch:
+    post:
+      summary: ''
+      operationId: postApiV1AdminRatesFetch
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+  /api/v1/admin/fraud-alerts:
+    get:
+      summary: ''
+      operationId: getApiV1AdminFraudAlerts
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+  '/api/v1/admin/fraud-alerts/{id}/clear':
+    post:
+      summary: ''
+      operationId: postApiV1AdminFraudAlertsIdClear
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the fraud alert.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/api/v1/admin/fraud-alerts/{id}/confirm':
+    post:
+      summary: ''
+      operationId: postApiV1AdminFraudAlertsIdConfirm
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      security: []
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the fraud alert.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /api/v1/admin/staff:
+    get:
+      summary: ''
+      operationId: getApiV1AdminStaff
+      description: ''
+      parameters: []
+      responses:
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Endpoints
+      security: []
+    post:
+      summary: ''
+      operationId: postApiV1AdminStaff
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Endpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: b
+                email:
+                  type: string
+                  description: 'Must be a valid email address.'
+                  example: zbailey@example.net
+                role:
+                  type: string
+                  description: ''
+                  example: finance_officer
+                  enum:
+                    - super_admin
+                    - kyc_reviewer
+                    - finance_officer
+                    - support_agent
+                password:
+                  type: string
+                  description: 'Must be at least 8 characters.'
+                  example: '-0pBNvYgxw'
+              required:
+                - name
+                - email
+                - role
+                - password
+      security: []

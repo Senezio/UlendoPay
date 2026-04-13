@@ -91,8 +91,9 @@ class KycController extends Controller
 
         $record = KycRecord::findOrFail($id);
 
-        // Only owner can view their own document
-        if ($record->user_id !== $request->user()->id) {
+        // Owner or staff can view the document
+        $viewer = $request->user();
+        if ($record->user_id !== $viewer->id && !$viewer->is_staff) {
             return response()->json(['message' => 'Access denied.'], 403);
         }
 

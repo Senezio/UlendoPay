@@ -10,93 +10,68 @@ use Illuminate\Support\Facades\Log;
 class OtpService
 {
     private int $expiryMinutes = 10;
-    private int $maxAttempts   = 3;
 
-    /**
-     * Generate and send an OTP to the user's phone.
-     * Invalidates any previous unused OTPs of the same type.
-     */
     public function send(User $user, string $type): void
     {
-        $phone = $user->phone;
+        // Use the phone attribute from the model (assuming it handles encryption/decryption)
+        $phone = $user->phone; 
 
         if (empty($phone)) {
-            throw new \RuntimeException(
-                "Cannot send OTP — user {$user->id} has no phone number."
-            );
+            throw new \RuntimeException("User has no phone number record.");
         }
 
-        // Invalidate previous unused OTPs of same type
-        OtpCode::where('user_id', $user->id)
-            ->where('type', $type)
-            ->where('is_used', false)
-            ->update(['is_used' => true, 'used_at' => now()]);
+        // Use phone_hash for the duplicate check - this exists in your migration
+        $exists = User::where("phone_hash", $user->phone_hash)
+            ->where("id", "!=", $user->id)
+            ->whereNotNull("phone_verified_at")
+            ->exists();
 
-        // Generate 6-digit OTP
-        $code     = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $codeHash = Hash::make($code);
+        if ($exists) {
+            throw new \RuntimeException("This number is already linked to an active account.");
+        }
+
+        // Invalidate previous OTPs
+        OtpCode::where("user_id", $user->id)
+            ->where("type", $type)
+            ->where("is_used", false)
+            ->update(["is_used" => true]);
+
+        $code = str_pad(random_int(0, 999999), 6, "0", STR_PAD_LEFT);
 
         OtpCode::create([
-            'user_id'        => $user->id,
-            'code_hash'      => $codeHash,
-            'type'           => $type,
-            'delivery_phone' => $phone,
-            'is_used'        => false,
-            'expires_at'     => now()->addMinutes($this->expiryMinutes),
+            "user_id"        => $user->id,
+            "code_hash"      => Hash::make($code),
+            "type"           => $type,
+            "delivery_phone" => $phone,
+            "is_used"        => false,
+            "expires_at"     => now()->addMinutes($this->expiryMinutes),
         ]);
 
-        // Send via SmsService
         app(SmsService::class)->sendOtp([
-            'phone' => $phone,
-            'otp'   => $code,
+            "phone"        => $phone,
+            "otp"          => $code,
+            "country_code" => $user->country_code,
         ]);
 
-        Log::info('[OtpService] OTP sent', [
-            'user_id' => $user->id,
-            'type'    => $type,
-            'phone'   => substr($phone, 0, 6) . '****',
-        ]);
+        Log::info("[OtpService] OTP sent to {$user->id}");
     }
 
-    /**
-     * Verify an OTP code submitted by the user.
-     * Returns true if valid, false if invalid or expired.
-     * Marks OTP as used on success.
-     */
     public function verify(User $user, string $type, string $code): bool
     {
-        $otp = OtpCode::where('user_id', $user->id)
-            ->where('type', $type)
-            ->where('is_used', false)
-            ->where('expires_at', '>', now())
-            ->latest('created_at')
+        $otp = OtpCode::where("user_id", $user->id)
+            ->where("type", $type)
+            ->where("is_used", false)
+            ->where("expires_at", ">", now())
+            ->latest("created_at")
             ->first();
 
-        if (!$otp) {
-            Log::warning('[OtpService] No valid OTP found', [
-                'user_id' => $user->id,
-                'type'    => $type,
-            ]);
+        if (!$otp || !Hash::check($code, $otp->code_hash)) {
             return false;
         }
 
-        if (!Hash::check($code, $otp->code_hash)) {
-            Log::warning('[OtpService] Invalid OTP submitted', [
-                'user_id' => $user->id,
-                'type'    => $type,
-            ]);
-            return false;
-        }
-
-        // Mark as used
         $otp->update([
-            'is_used' => true,
-            'used_at' => now(),
-        ]);
-
-        Log::info('[OtpService] OTP verified successfully', [
-            'user_id' => $user->id,
-            'type'    => $type,
+            "is_used" => true,
+            "used_at" => now(),
         ]);
 
         return true;

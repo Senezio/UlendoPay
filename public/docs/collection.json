@@ -1,0 +1,2944 @@
+{
+    "variable": [
+        {
+            "id": "baseUrl",
+            "key": "baseUrl",
+            "type": "string",
+            "name": "string",
+            "value": "http:\/\/ulendopay.malawihire.com"
+        }
+    ],
+    "info": {
+        "name": "UlendoPay API Documentation",
+        "_postman_id": "146d4006-cfa3-4791-9009-6e7f74384304",
+        "description": "",
+        "schema": "https:\/\/schema.getpostman.com\/json\/collection\/v2.1.0\/collection.json"
+    },
+    "item": [
+        {
+            "name": "Endpoints",
+            "description": "",
+            "item": [
+                {
+                    "name": "Step 1 of registration \u2014 create account, send phone OTP.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/register",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/register"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"name\":\"b\",\"phone\":\"ngzmiyvdljnikhwa\",\"country_code\":\"ykc\",\"pin\":\"myuw\",\"email\":\"theo.hauck@example.com\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Step 2 of registration \u2014 verify phone with OTP.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/verify-phone",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/verify-phone"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"user_id\":16,\"otp\":\"ngzmiy\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Step 1 of login \u2014 verify credentials, send 2FA OTP.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/login",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/login"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"method\":\"phone_pin\",\"phone\":\"architecto\",\"pin\":\"ngzm\",\"email\":\"gulgowski.asia@example.com\",\"password\":\"|]|{+-\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Step 2 of login \u2014 verify 2FA OTP, issue token.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/verify-login",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/verify-login"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"user_id\":16,\"otp\":\"ngzmiy\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/auth\/forgot-pin",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/forgot-pin",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/forgot-pin"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"phone\":\"bngzmiyvdljnikhw\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/auth\/reset-pin",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/reset-pin",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/reset-pin"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"phone\":\"bngzmiyvdljnikhw\",\"otp\":\"aykcmy\",\"pin\":\"uwpw\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/auth\/forgot-password",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/forgot-password",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/forgot-password"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"email\":\"gbailey@example.net\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/auth\/reset-password",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/reset-password",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/reset-password"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"email\":\"gbailey@example.net\",\"otp\":\"miyvdl\",\"password\":\"architecto\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Pawapay webhook \u2014 receives deposit status updates.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/topup\/webhook",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/topup\/webhook"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "This endpoint is PUBLIC \u2014 no auth middleware.\nSecurity is via webhook signature verification.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Pawapay payout webhook \u2014 receives payout status updates.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/withdraw\/webhook",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/withdraw\/webhook"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "PUBLIC endpoint \u2014 secured via signature verification.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/auth\/logout",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/logout",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/logout"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/v1\/auth\/me",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/auth\/me",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/auth\/me"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Get current KYC status and submission history.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/kyc\/status",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/kyc\/status"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Submit a KYC document for review.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/kyc\/submit",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/kyc\/submit"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "multipart\/form-data"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "document_type",
+                                    "value": "national_id",
+                                    "type": "text",
+                                    "description": ""
+                                },
+                                {
+                                    "key": "document_number",
+                                    "value": "b",
+                                    "type": "text",
+                                    "description": "Must not be greater than 50 characters."
+                                },
+                                {
+                                    "key": "document",
+                                    "src": [],
+                                    "type": "file"
+                                }
+                            ]
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Serve a KYC document securely via signed token.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/kyc\/document\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/kyc\/document\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the document."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Only accessible to the document owner or admins.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/wallets",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/wallets",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/wallets"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/wallets\/{currency}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/wallets\/:currency",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/wallets\/:currency",
+                            "variable": [
+                                {
+                                    "id": "currency",
+                                    "key": "currency",
+                                    "value": "architecto",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Get supported operators for the authenticated user's currency.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/topup\/operators",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/topup\/operators"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Initiate a top-up \u2014 triggers USSD prompt on user's phone.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/topup\/initiate",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/topup\/initiate"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"phone_number\":\"bngzmiyvdljnikhw\",\"mobile_operator\":\"a\",\"amount\":79}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get top-up status by reference.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/topup\/status\/:reference",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/topup\/status\/:reference",
+                            "variable": [
+                                {
+                                    "id": "reference",
+                                    "key": "reference",
+                                    "value": "architecto",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Frontend polls this after initiating to check if payment was confirmed.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Get top-up history for authenticated user.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/topup\/history",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/topup\/history"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Get supported operators for the authenticated user's currency.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/withdraw\/operators",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/withdraw\/operators"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Initiate a withdrawal to mobile money.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/withdraw\/initiate",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/withdraw\/initiate"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"phone_number\":\"bngzmiyvdljnikhw\",\"mobile_operator\":\"a\",\"amount\":79}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get withdrawal status by reference.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/withdraw\/status\/:reference",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/withdraw\/status\/:reference",
+                            "variable": [
+                                {
+                                    "id": "reference",
+                                    "key": "reference",
+                                    "value": "architecto",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Get withdrawal history for authenticated user.",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/withdraw\/history",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/withdraw\/history"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/recipients",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/recipients",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/recipients"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "POST api\/v1\/recipients",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/recipients",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/recipients"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"full_name\":\"b\",\"phone\":\"ngzmiyvdljnikhwa\",\"country_code\":\"ykc\",\"payment_method\":\"cash_pickup\",\"mobile_network\":\"architecto\",\"mobile_number\":\"architecto\",\"bank_name\":\"architecto\",\"bank_account_number\":\"architecto\",\"bank_branch_code\":\"architecto\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/v1\/recipients\/{id}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/recipients\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/recipients\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the recipient."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "PUT api\/v1\/recipients\/{id}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/recipients\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/recipients\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the recipient."
+                                }
+                            ]
+                        },
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"full_name\":\"b\",\"phone\":\"ngzmiyvdljnikhwa\",\"mobile_network\":\"architecto\",\"mobile_number\":\"architecto\",\"bank_name\":\"architecto\",\"bank_account_number\":\"architecto\",\"bank_branch_code\":\"architecto\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "DELETE api\/v1\/recipients\/{id}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/recipients\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/recipients\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the recipient."
+                                }
+                            ]
+                        },
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/rate-locks",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/rate-locks",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/rate-locks"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"from_currency\":\"bng\",\"to_currency\":\"zmi\",\"send_amount\":43}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/v1\/rate-locks\/{id}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/rate-locks\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/rate-locks\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the rate lock."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "POST api\/v1\/transactions",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/transactions",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/transactions"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"idempotency_key\":\"b\",\"rate_lock_id\":16,\"recipient_id\":16,\"send_amount\":22}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/v1\/transactions",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/transactions",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/transactions"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/transactions\/{reference}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/transactions\/:reference",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/transactions\/:reference",
+                            "variable": [
+                                {
+                                    "id": "reference",
+                                    "key": "reference",
+                                    "value": "architecto",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/admin\/stats",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/stats",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/stats"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/admin\/analytics",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/analytics",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/analytics"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/admin\/kyc\/queue",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/kyc\/queue",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/kyc\/queue"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/admin\/kyc\/{id}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/kyc\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/kyc\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the kyc."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "POST api\/v1\/admin\/kyc\/{id}\/approve",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/kyc\/:id\/approve",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/kyc\/:id\/approve",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the kyc."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/admin\/kyc\/{id}\/reject",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/kyc\/:id\/reject",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/kyc\/:id\/reject",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the kyc."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"b\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/v1\/admin\/users",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/users",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/users"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/admin\/users\/{id}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/users\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/users\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the user."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "POST api\/v1\/admin\/users\/{id}\/suspend",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/users\/:id\/suspend",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/users\/:id\/suspend",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the user."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"reason\":\"b\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/admin\/users\/{id}\/restore",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/users\/:id\/restore",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/users\/:id\/restore",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the user."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/v1\/admin\/transactions",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/transactions",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/transactions"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/admin\/transactions\/{reference}",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/transactions\/:reference",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/transactions\/:reference",
+                            "variable": [
+                                {
+                                    "id": "reference",
+                                    "key": "reference",
+                                    "value": "architecto",
+                                    "description": ""
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "GET api\/v1\/admin\/rates",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/rates",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/rates"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "POST api\/v1\/admin\/rates\/fetch",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/rates\/fetch",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/rates\/fetch"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/v1\/admin\/fraud-alerts",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/fraud-alerts",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/fraud-alerts"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "POST api\/v1\/admin\/fraud-alerts\/{id}\/clear",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/fraud-alerts\/:id\/clear",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/fraud-alerts\/:id\/clear",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the fraud alert."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "POST api\/v1\/admin\/fraud-alerts\/{id}\/confirm",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/fraud-alerts\/:id\/confirm",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/fraud-alerts\/:id\/confirm",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": "architecto",
+                                    "description": "The ID of the fraud alert."
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "GET api\/v1\/admin\/staff",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/staff",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/staff"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [
+                                {
+                                    "key": "cache-control",
+                                    "value": "no-cache, private"
+                                },
+                                {
+                                    "key": "content-type",
+                                    "value": "application\/json"
+                                },
+                                {
+                                    "key": "x-frame-options",
+                                    "value": "DENY"
+                                },
+                                {
+                                    "key": "x-content-type-options",
+                                    "value": "nosniff"
+                                },
+                                {
+                                    "key": "x-xss-protection",
+                                    "value": "1; mode=block"
+                                },
+                                {
+                                    "key": "referrer-policy",
+                                    "value": "strict-origin-when-cross-origin"
+                                },
+                                {
+                                    "key": "permissions-policy",
+                                    "value": "camera=(), microphone=(), geolocation=()"
+                                },
+                                {
+                                    "key": "strict-transport-security",
+                                    "value": "max-age=31536000; includeSubDomains"
+                                },
+                                {
+                                    "key": "vary",
+                                    "value": "Origin"
+                                }
+                            ],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "POST api\/v1\/admin\/staff",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/v1\/admin\/staff",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/v1\/admin\/staff"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"name\":\"b\",\"email\":\"zbailey@example.net\",\"role\":\"finance_officer\",\"password\":\"-0pBNvYgxw\"}"
+                        },
+                        "description": "",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ],
+    "auth": {
+        "type": "noauth"
+    }
+}

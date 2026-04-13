@@ -106,9 +106,9 @@ class ProcessOutboxEvents extends Command
     {
         $transaction = Transaction::findOrFail($event->payload['transaction_id']);
 
-        if ($transaction->status !== 'escrowed') {
+        if (!in_array($transaction->status, ['escrowed', 'processing', 'retrying'])) {
             throw new \RuntimeException(
-                "Transaction {$transaction->reference_number} is not escrowed. " .
+                "Transaction {$transaction->reference_number} is not in a dispatchable state. " .
                 "Current status: {$transaction->status}"
             );
         }

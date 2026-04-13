@@ -41,6 +41,23 @@ return [
         'timeout'   => env('PAWAPAY_TIMEOUT', 30),
     ],
 
+
+    'mtn_momo' => [
+        'base_url'     => env('MTN_MOMO_BASE_URL', 'https://sandbox.momodeveloper.mtn.com'),
+        'environment'  => env('MTN_MOMO_ENVIRONMENT', 'sandbox'),
+        'callback_url' => env('MTN_MOMO_CALLBACK_URL', ''),
+        'collection'   => [
+            'subscription_key' => env('MTN_MOMO_COLLECTION_SUBSCRIPTION_KEY', ''),
+            'user_id'          => env('MTN_MOMO_COLLECTION_USER_ID', ''),
+            'api_key'          => env('MTN_MOMO_COLLECTION_API_KEY', ''),
+        ],
+        'disbursement' => [
+            'subscription_key' => env('MTN_MOMO_DISBURSEMENT_SUBSCRIPTION_KEY', ''),
+            'user_id'          => env('MTN_MOMO_DISBURSEMENT_USER_ID', ''),
+            'api_key'          => env('MTN_MOMO_DISBURSEMENT_API_KEY', ''),
+        ],
+    ],
+
     'africastalking' => [
         'username' => env('AT_USERNAME', ''),
         'api_key'  => env('AT_API_KEY', ''),

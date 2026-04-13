@@ -5,6 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\AuditLog;
+use App\Models\PendingClaim;
+use App\Models\Account;
+use App\Models\OutboxEvent;
+use App\Services\LedgerService;
+use Illuminate\Support\Facades\DB;
 use App\Services\OtpService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -107,6 +112,9 @@ class AuthController extends Controller
 
         // Create wallet for user's home currency
         $this->createUserWallet($user);
+
+        // Release any pending claims for this phone number
+        $this->releasePendingClaims($user);
 
         AuditLog::create([
             'user_id'     => $user->id,
@@ -469,4 +477,95 @@ class AuthController extends Controller
             'has_password'     => !is_null($user->password),
         ];
     }
+    /**
+     * Release any pending claims for a newly verified user.
+     * Called after phone verification completes.
+     */
+    private function releasePendingClaims(User $user): void
+    {
+        $phoneHash = hash('sha256', $user->phone);
+
+        $claims = PendingClaim::where('recipient_phone_hash', $phoneHash)
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->get();
+
+        if ($claims->isEmpty()) return;
+
+        foreach ($claims as $claim) {
+            try {
+                DB::transaction(function () use ($claim, $user) {
+                    $ledger = app(LedgerService::class);
+
+                    // Find or create recipient wallet
+                    $recipientAccount = Account::where('owner_id', $user->id)
+                        ->where('owner_type', User::class)
+                        ->where('type', 'user_wallet')
+                        ->where('currency_code', $claim->currency_code)
+                        ->first();
+
+                    if (!$recipientAccount) return;
+
+                    $escrowAccount = Account::where('type', 'escrow')
+                        ->where('currency_code', $claim->currency_code)
+                        ->firstOrFail();
+
+                    $reference = $claim->transaction->reference_number;
+
+                    $ledger->post(
+                        reference:   "TXN-{$reference}-CLAIM",
+                        type:        'transfer_claim',
+                        currency:    $claim->currency_code,
+                        entries: [
+                            [
+                                'account_id'  => $escrowAccount->id,
+                                'type'        => 'debit',
+                                'amount'      => $claim->amount,
+                                'description' => "Claim released: {$reference}",
+                            ],
+                            [
+                                'account_id'  => $recipientAccount->id,
+                                'type'        => 'credit',
+                                'amount'      => $claim->amount,
+                                'description' => "Claimed transfer: {$reference}",
+                            ],
+                        ],
+                        description: "Claim release for {$reference}"
+                    );
+
+                    $claim->update([
+                        'status'     => 'claimed',
+                        'claimed_by' => $user->id,
+                        'claimed_at' => now(),
+                    ]);
+
+                    $claim->transaction->update([
+                        'status'       => 'completed',
+                        'completed_at' => now(),
+                    ]);
+
+                    // Notify recipient
+                    OutboxEvent::create([
+                        'event_type'     => 'sms_notification',
+                        'transaction_id' => $claim->transaction_id,
+                        'payload'        => [
+                            'type'      => 'claim_released',
+                            'phone'     => $user->phone,
+                            'amount'    => $claim->amount,
+                            'currency'  => $claim->currency_code,
+                            'reference' => $reference,
+                        ],
+                        'status'          => 'pending',
+                        'next_attempt_at' => now(),
+                    ]);
+                });
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('[Auth] Failed to release pending claim', [
+                    'claim_id' => $claim->id,
+                    'error'    => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
 }
