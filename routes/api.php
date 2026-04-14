@@ -103,6 +103,16 @@ Route::prefix('v1')->group(function () {
             Route::post('/rates/fetch',                    [AdminController::class, 'fetchRates'])
                 ->middleware('admin:super_admin');
 
+            // Account management
+            Route::get('/accounts',                        [AdminController::class, 'accounts']);
+            Route::post('/accounts',                       [AdminController::class, 'accountCreate'])
+                ->middleware('admin:super_admin');
+            Route::post('/accounts/{id}/toggle',           [AdminController::class, 'accountToggle'])
+                ->middleware('admin:super_admin');
+            Route::get('/accounts/{id}/ledger',            [AdminController::class, 'accountLedger']);
+            Route::post('/accounts/{id}/adjust',           [AdminController::class, 'accountAdjust'])
+                ->middleware('admin:super_admin');
+
             // Partner management
             Route::get('/partners',                        [AdminController::class, 'partners']);
             Route::post('/partners/{id}/toggle',           [AdminController::class, 'partnerToggle'])

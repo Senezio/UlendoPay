@@ -42,7 +42,7 @@ Schedule::command('reconcile:accounts')
     ->dailyAt('02:00')
     ->withoutOverlapping()
     ->onFailure(function () {
-        Log::error('[scheduler] reconcile:accounts FAILED');
+        Log::warning('[scheduler] reconcile:accounts found variances — check reconciliation_snapshots table');
     });
 
 // ── Prune expired idempotency keys ───────────────────────────────────────────
