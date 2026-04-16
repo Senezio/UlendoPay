@@ -179,7 +179,7 @@ class KycService
         // Return a temporary URL valid for 5 minutes
         // For local disk this returns a signed route URL
         return route('kyc.document', [
-            'record' => $record->id,
+            'id' => $record->id,
             'token'  => encrypt([
                 'record_id'  => $record->id,
                 'expires_at' => now()->addMinutes(5)->timestamp,
