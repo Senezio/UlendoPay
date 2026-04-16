@@ -359,15 +359,101 @@ class TransactionService
 
                     $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
 
+                    // Credit recipient wallet or hold in escrow if unregistered
+                    $recipientPhoneHash = hash('sha256', $recipient->mobile_number);
+                    $recipientUser      = User::where('phone_hash', $recipientPhoneHash)->first();
+
+                    if ($recipientUser) {
+                        $recipientAccount = Account::where('owner_id', $recipientUser->id)
+                            ->where('owner_type', User::class)
+                            ->where('type', 'user_wallet')
+                            ->where('currency_code', $receiveCurrency)
+                            ->first();
+
+                        if ($recipientAccount) {
+                            $escrowAccount = Account::where('type', 'escrow')
+                                ->where('currency_code', $receiveCurrency)
+                                ->firstOrFail();
+
+                            $this->ledger->post(
+                                reference:   "TXN-{$reference}-CREDIT",
+                                type:        'transfer_credit',
+                                currency:    $receiveCurrency,
+                                entries: [
+                                    [
+                                        'account_id'  => $escrowAccount->id,
+                                        'type'        => 'debit',
+                                        'amount'      => $receiveAmount,
+                                        'description' => "Disbursement release: {$reference}",
+                                    ],
+                                    [
+                                        'account_id'  => $recipientAccount->id,
+                                        'type'        => 'credit',
+                                        'amount'      => $receiveAmount,
+                                        'description' => "Transfer received: {$reference}",
+                                    ],
+                                ],
+                                description: "Wallet credit for cross-currency transfer: {$reference}"
+                            );
+
+                            OutboxEvent::create([
+                                'event_type'     => 'sms_notification',
+                                'transaction_id' => $transaction->id,
+                                'payload'        => [
+                                    'type'      => 'transfer_received',
+                                    'phone'     => $recipientUser->phone,
+                                    'amount'    => $receiveAmount,
+                                    'currency'  => $receiveCurrency,
+                                    'reference' => $reference,
+                                ],
+                                'status'          => 'pending',
+                                'next_attempt_at' => Carbon::now(),
+                            ]);
+
+                            $transaction->update([
+                                'status'       => 'completed',
+                                'completed_at' => now(),
+                            ]);
+                        } else {
+                            $maskedPhone = substr($recipient->mobile_number, 0, 4)
+                                . str_repeat('*', max(0, strlen($recipient->mobile_number) - 7))
+                                . substr($recipient->mobile_number, -3);
+
+                            PendingClaim::create([
+                                'transaction_id'         => $transaction->id,
+                                'recipient_phone_hash'   => $recipientPhoneHash,
+                                'recipient_phone_masked' => $maskedPhone,
+                                'amount'                 => $receiveAmount,
+                                'currency_code'          => $receiveCurrency,
+                                'status'                 => 'pending',
+                                'expires_at'             => Carbon::now()->addHours(48),
+                            ]);
+                        }
+                    } else {
+                        $maskedPhone = substr($recipient->mobile_number, 0, 4)
+                            . str_repeat('*', max(0, strlen($recipient->mobile_number) - 7))
+                            . substr($recipient->mobile_number, -3);
+
+                        PendingClaim::create([
+                            'transaction_id'         => $transaction->id,
+                            'recipient_phone_hash'   => $recipientPhoneHash,
+                            'recipient_phone_masked' => $maskedPhone,
+                            'amount'                 => $receiveAmount,
+                            'currency_code'          => $receiveCurrency,
+                            'status'                 => 'pending',
+                            'expires_at'             => Carbon::now()->addHours(48),
+                        ]);
+                    }
+
                     OutboxEvent::create([
-                        'event_type'     => 'disbursement_requested',
+                        'event_type'     => 'sms_notification',
                         'transaction_id' => $transaction->id,
                         'payload'        => [
-                            'transaction_id'   => $transaction->id,
-                            'reference'        => $reference,
-                            'receive_amount'   => $receiveAmount,
-                            'receive_currency' => $receiveCurrency,
-                            'recipient_id'     => $recipient->id,
+                            'type'      => 'transfer_sent',
+                            'phone'     => $sender->phone,
+                            'amount'    => $sendAmount,
+                            'currency'  => $sendCurrency,
+                            'reference' => $reference,
                         ],
                         'status'          => 'pending',
                         'next_attempt_at' => Carbon::now(),

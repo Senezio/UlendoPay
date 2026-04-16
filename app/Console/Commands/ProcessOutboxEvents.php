@@ -4,6 +4,10 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\OutboxEvent;
+use App\Models\Account;
+use App\Models\User;
+use App\Models\PendingClaim;
+use App\Services\LedgerService;
 use App\Models\Transaction;
 use App\Services\PartnerService;
 use App\Services\RefundService;
@@ -70,6 +74,14 @@ class ProcessOutboxEvents extends Command
             $this->line("[outbox] Event {$event->id} ({$event->event_type}) completed.");
 
         } catch (\Throwable $e) {
+            $permanentErrors = ['PARAMETER_INVALID', 'INVALID_PARAMETER', 'VALIDATION_ERROR'];
+            $isPermanent = collect($permanentErrors)->contains(fn($code) => str_contains($e->getMessage(), $code));
+            if ($isPermanent) {
+                $event->update(['status' => 'failed', 'attempts' => $event->max_attempts, 'failure_reason' => $e->getMessage()]);
+                \Illuminate\Support\Facades\Log::error('[outbox] Permanent error - no retry', ['event_id' => $event->id, 'error' => $e->getMessage()]);
+                if ($event->event_type === 'disbursement_requested') $this->queueRefundForFailedDisbursement($event);
+                return;
+            }
             $attempts = $event->attempts + 1;
             $failed   = $attempts >= $event->max_attempts;
 
@@ -134,6 +146,9 @@ class ProcessOutboxEvents extends Command
                 "via partner ref: {$result->partnerReference}"
             );
 
+            // ── Credit recipient UlendoPay wallet ────────────────────────
+            $this->creditRecipientWallet($transaction);
+
             // Queue SMS for both sender and recipient
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
@@ -195,6 +210,115 @@ class ProcessOutboxEvents extends Command
             'ReconciliationService not yet implemented. ' .
             'Build it before enabling reconciliation_triggered events.'
         );
+    }
+
+    private function creditRecipientWallet(\App\Models\Transaction $transaction): void
+    {
+        $receiveCurrency = $transaction->receive_currency;
+        $receiveAmount   = (float) $transaction->receive_amount;
+        $reference       = $transaction->reference_number;
+
+        $phoneHash     = hash('sha256', $transaction->recipient->mobile_number);
+        $recipientUser = User::where('phone_hash', $phoneHash)->first();
+
+        $escrowAccount = Account::where('type', 'escrow')
+            ->where('currency_code', $receiveCurrency)
+            ->firstOrFail();
+
+        if ($recipientUser) {
+            $recipientAccount = Account::where('owner_id', $recipientUser->id)
+                ->where('owner_type', User::class)
+                ->where('type', 'user_wallet')
+                ->where('currency_code', $receiveCurrency)
+                ->first();
+
+            if (!$recipientAccount) {
+                Log::warning("[outbox] Recipient has no {$receiveCurrency} wallet — holding in escrow", [
+                    'reference' => $reference,
+                ]);
+                $this->holdInEscrowAndCreateClaim($transaction, $escrowAccount, $phoneHash);
+                return;
+            }
+
+            \Illuminate\Support\Facades\DB::transaction(function () use (
+                $transaction, $escrowAccount, $recipientAccount,
+                $receiveCurrency, $receiveAmount, $reference, $recipientUser
+            ) {
+                app(LedgerService::class)->post(
+                    reference:   "TXN-{$reference}-CREDIT",
+                    type:        'transfer_credit',
+                    currency:    $receiveCurrency,
+                    entries: [
+                        [
+                            'account_id'  => $escrowAccount->id,
+                            'type'        => 'debit',
+                            'amount'      => $receiveAmount,
+                            'description' => "Disbursement release: {$reference}",
+                        ],
+                        [
+                            'account_id'  => $recipientAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => $receiveAmount,
+                            'description' => "Transfer received: {$reference}",
+                        ],
+                    ],
+                    description: "Wallet credit after disbursement: {$reference}"
+                );
+
+                OutboxEvent::create([
+                    'event_type'     => 'sms_notification',
+                    'transaction_id' => $transaction->id,
+                    'payload'        => [
+                        'type'      => 'transfer_received',
+                        'phone'     => $recipientUser->phone,
+                        'amount'    => $receiveAmount,
+                        'currency'  => $receiveCurrency,
+                        'reference' => $reference,
+                    ],
+                    'status'          => 'pending',
+                    'next_attempt_at' => now(),
+                ]);
+            });
+
+            Log::info("[outbox] Recipient wallet credited", [
+                'reference' => $reference,
+                'amount'    => $receiveAmount,
+                'currency'  => $receiveCurrency,
+            ]);
+
+        } else {
+            $this->holdInEscrowAndCreateClaim($transaction, $escrowAccount, $phoneHash);
+        }
+    }
+
+    private function holdInEscrowAndCreateClaim(
+        \App\Models\Transaction $transaction,
+        Account $escrowAccount,
+        string $phoneHash
+    ): void {
+        $receiveCurrency = $transaction->receive_currency;
+        $receiveAmount   = (float) $transaction->receive_amount;
+        $reference       = $transaction->reference_number;
+
+        $maskedPhone = substr($transaction->recipient->mobile_number, 0, 4)
+            . str_repeat('*', max(0, strlen($transaction->recipient->mobile_number) - 7))
+            . substr($transaction->recipient->mobile_number, -3);
+
+        PendingClaim::create([
+            'transaction_id'         => $transaction->id,
+            'recipient_phone_hash'   => $phoneHash,
+            'recipient_phone_masked' => $maskedPhone,
+            'amount'                 => $receiveAmount,
+            'currency_code'          => $receiveCurrency,
+            'status'                 => 'pending',
+            'expires_at'             => now()->addHours(48),
+        ]);
+
+        Log::info("[outbox] Recipient not found — PendingClaim created", [
+            'reference' => $reference,
+            'amount'    => $receiveAmount,
+            'currency'  => $receiveCurrency,
+        ]);
     }
 
     private function queueRefundForFailedDisbursement(OutboxEvent $event): void

@@ -11,43 +11,52 @@ class PartnerSeeder extends Seeder
 {
     public function run(): void
     {
-        // Create PawaPay Partner
+        // ── PawaPay ──────────────────────────────────────────────────────
+        // Operates in all directions between its supported currencies.
+        // Add new currencies here as PawaPay expands coverage.
+        $pawaPayCurrencies = [
+            'MWK', 'TZS', 'KES', 'ZMW', 'ZAR', 'MZN', 'BWP', 'ETB', 'MGA'
+        ];
+
         $pawa = Partner::updateOrCreate(
             ['code' => 'pawapay'],
             [
-                'name' => 'PawaPay',
-                'type' => 'mobile_money',
-                'country_code' => 'MWI', // Matches currencyToCountry mapping
-                'api_config_encrypted' => Crypt::encrypt(['api_key' => 'seed_test_key']),
-                'is_active' => true,
+                'name'                  => 'PawaPay',
+                'type'                  => 'mobile_money',
+                'country_code'          => 'MWI',
+                'api_config_encrypted'  => Crypt::encrypt(['api_key' => 'seed_test_key']),
+                'is_active'             => true,
             ]
         );
 
-        // Seed the 8 Supported Corridors from PawapayPartner.php
-        $corridors = [
-            'TZS', 'KES', 'ZMW', 'ZAR', 'MZN', 'BWP', 'ETB', 'MGA'
-        ];
+        $created = 0;
+        $skipped = 0;
 
-        foreach ($corridors as $currency) {
-            PartnerCorridor::updateOrCreate(
-                [
-                    'partner_id' => $pawa->id,
-                    'from_currency' => 'MWK',
-                    'to_currency' => $currency,
-                ],
-                [
-                    'min_amount' => 1000,
-                    'max_amount' => 1000000,
-                    'priority' => 1,
-                    'is_active' => true,
-                ]
-            );
+        // Full mesh — all ordered pairs (from != to)
+        foreach ($pawaPayCurrencies as $from) {
+            foreach ($pawaPayCurrencies as $to) {
+                if ($from === $to) continue;
+
+                $corridor = PartnerCorridor::updateOrCreate(
+                    [
+                        'partner_id'    => $pawa->id,
+                        'from_currency' => $from,
+                        'to_currency'   => $to,
+                    ],
+                    [
+                        'min_amount'  => 100,
+                        'max_amount'  => 1000000,
+                        'priority'    => 1,
+                        'fee_percent' => 1.5,
+                        'fee_flat'    => 0,
+                        'is_active'   => true,
+                    ]
+                );
+
+                $corridor->wasRecentlyCreated ? $created++ : $skipped++;
+            }
         }
-        
-        // Add domestic corridor for top-ups/withdrawals if needed
-        PartnerCorridor::updateOrCreate(
-            ['partner_id' => $pawa->id, 'from_currency' => 'MWK', 'to_currency' => 'MWK'],
-            ['min_amount' => 500, 'max_amount' => 2000000, 'priority' => 1, 'is_active' => true]
-        );
+
+        $this->command->info("PawaPay: {$created} corridors created, {$skipped} already existed.");
     }
 }

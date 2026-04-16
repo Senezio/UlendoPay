@@ -133,7 +133,7 @@ class LedgerService
                 // Prevent accounts going negative (except system/escrow accounts)
                 if (
                     bccomp($newBalance, '0', 6) < 0 &&
-                    ! in_array($account->type, ['escrow', 'system', 'fee'])
+                    $account->type === 'user_wallet'
                 ) {
                     throw new \RuntimeException(
                         "Insufficient balance on account {$account->code}. " .

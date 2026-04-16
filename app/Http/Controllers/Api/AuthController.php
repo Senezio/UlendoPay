@@ -61,23 +61,25 @@ class AuthController extends Controller
         $user->phone = $data['phone'];
         $user->pin   = $data['pin'];
         $user->save();
+        if (app()->environment('local')) {
+            // Local: Auto-verify and jump to dashboard
+            $user->update(['phone_verified_at' => now()]);
+            $this->createUserWallet($user);
 
-        // Send phone verification OTP
+            return response()->json([
+                'message'   => 'Registration successful (Local Bypass).',
+                'user'      => $user,
+                'token'     => $user->createToken('auth_token')->plainTextToken,
+                'next_step' => 'dashboard',
+            ], 201);
+        }
+
+        // Production: Send OTP and require manual verification
         $this->otpService->send($user, 'phone_verification');
 
-        AuditLog::create([
-            'user_id'     => $user->id,
-            'action'      => 'user.registered',
-            'entity_type' => 'User',
-            'entity_id'   => $user->id,
-            'new_values'  => ['country_code' => $user->country_code],
-            'ip_address'  => $request->ip(),
-            'user_agent'  => $request->userAgent(),
-        ]);
-
         return response()->json([
-            'message' => 'Registration successful. Please verify your phone number.',
-            'user_id' => $user->id,
+            'message'   => 'Registration successful. Please verify your phone number.',
+            'user_id'   => $user->id,
             'next_step' => 'verify_phone',
         ], 201);
     }
@@ -161,7 +163,6 @@ class AuthController extends Controller
         }
 
         if (!$user->isPhoneVerified()) {
-            // Resend verification OTP
             $this->otpService->send($user, 'phone_verification');
 
             return response()->json([
@@ -172,7 +173,20 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // Send 2FA OTP
+        // Check environment: skip 2FA if local
+        if (app()->environment('local')) {
+            auth()->login($user);
+            RateLimiter::clear($throttleKey);
+
+            return response()->json([
+                'message'   => 'Login successful (Local Environment).',
+                'user'      => $user,
+                'token'     => $user->createToken('auth_token')->plainTextToken,
+                'next_step' => 'dashboard',
+            ]);
+        }
+
+        // Send 2FA OTP (Production/Staging logic)
         $this->otpService->send($user, 'login_2fa');
 
         RateLimiter::clear($throttleKey);
