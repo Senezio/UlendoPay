@@ -83,10 +83,16 @@ class KycController extends Controller
 
         $mimeType = Storage::disk('kyc')->mimeType($record->file_path);
         
-        // Use 'inline' to tell the browser to display it instead of downloading
+        // Detect the frontend origin dynamically
+        $origin = $request->headers->get('origin') 
+               ?? (parse_url($request->headers->get('referer'), PHP_URL_SCHEME) . '://' . parse_url($request->headers->get('referer'), PHP_URL_HOST))
+               ?? '*';
+
         return Storage::disk('kyc')->response($record->file_path, null, [
             'Content-Type' => $mimeType,
-            'Content-Disposition' => 'inline; filename="' . basename($record->file_path) . '"'
+            'Content-Disposition' => 'inline; filename="' . basename($record->file_path) . '"',
+            'X-Frame-Options' => "ALLOW-FROM $origin",
+            'Content-Security-Policy' => "frame-ancestors 'self' $origin"
         ]);
     }
 
