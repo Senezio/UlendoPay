@@ -29,6 +29,9 @@ Route::prefix('v1')->group(function () {
     Route::post('/topup/webhook',    [TopUpController::class, 'webhook']);
     Route::post('/withdraw/webhook', [WithdrawalController::class, 'webhook']);
 
+    // KYC document serve — secured via signed token
+    Route::get('/kyc/document/{id}', [KycController::class, 'document'])->name('kyc.document');
+
     // ── Authenticated routes ─────────────────────────────────────────────────
     Route::middleware('auth:sanctum')->group(function () {
 
@@ -39,8 +42,6 @@ Route::prefix('v1')->group(function () {
         // KYC
         Route::get('/kyc/status',        [KycController::class, 'status']);
         Route::post('/kyc/submit',       [KycController::class, 'submit']);
-        Route::get('/kyc/document/{id}', [KycController::class, 'document'])
-            ->name('kyc.document');
 
         // Wallets
         Route::get('/wallets',            [WalletController::class, 'index']);
