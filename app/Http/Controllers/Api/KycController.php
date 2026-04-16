@@ -7,17 +7,15 @@ use App\Models\KycRecord;
 use App\Services\KycService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
 
 class KycController extends Controller
 {
     public function __construct(private readonly KycService $kycService) {}
 
-    /**
-     * Get current KYC status and submission history.
-     */
     public function status(Request $request): JsonResponse
     {
-        $user    = $request->user();
+        $user = $request->user();
         $records = KycRecord::where('user_id', $user->id)
             ->latest()
             ->get()
@@ -30,9 +28,6 @@ class KycController extends Controller
         ]);
     }
 
-    /**
-     * Submit a KYC document for review.
-     */
     public function submit(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -51,10 +46,9 @@ class KycController extends Controller
             );
 
             return response()->json([
-                'message' => 'KYC document submitted successfully. Review typically takes 1-2 business days.',
+                'message' => 'KYC document submitted successfully.',
                 'record'  => $this->formatRecord($record),
             ], 201);
-
         } catch (\RuntimeException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -63,13 +57,9 @@ class KycController extends Controller
         }
     }
 
-    /**
-     * Serve a KYC document securely via signed token.
-     * Only accessible to the document owner or admins.
-     */
     public function document(Request $request, int $id): mixed
     {
-        $token  = $request->query('token');
+        $token = $request->query('token');
 
         if (!$token) {
             return response()->json(['message' => 'Access denied.'], 403);
@@ -78,31 +68,26 @@ class KycController extends Controller
         try {
             $payload = decrypt($token);
         } catch (\Throwable) {
-            return response()->json(['message' => 'Invalid or expired token.'], 403);
+            return response()->json(['message' => 'Invalid token.'], 403);
         }
 
-        if ($payload['record_id'] !== $id) {
-            return response()->json(['message' => 'Token mismatch.'], 403);
-        }
-
-        if (now()->timestamp > $payload['expires_at']) {
-            return response()->json(['message' => 'Token expired.'], 403);
+        if ($payload['record_id'] !== $id || now()->timestamp > $payload['expires_at']) {
+            return response()->json(['message' => 'Token invalid or expired.'], 403);
         }
 
         $record = KycRecord::findOrFail($id);
 
-        // Owner or staff can view the document
-        $viewer = $request->user();
-        if ($record->user_id !== $viewer->id && !$viewer->is_staff) {
-            return response()->json(['message' => 'Access denied.'], 403);
-        }
-
-        if (!\Illuminate\Support\Facades\Storage::disk('kyc')->exists($record->file_path)) {
+        if (!Storage::disk('kyc')->exists($record->file_path)) {
             return response()->json(['message' => 'Document not found.'], 404);
         }
 
-        return \Illuminate\Support\Facades\Storage::disk('kyc')
-            ->response($record->file_path);
+        $mimeType = Storage::disk('kyc')->mimeType($record->file_path);
+        
+        // Use 'inline' to tell the browser to display it instead of downloading
+        return Storage::disk('kyc')->response($record->file_path, null, [
+            'Content-Type' => $mimeType,
+            'Content-Disposition' => 'inline; filename="' . basename($record->file_path) . '"'
+        ]);
     }
 
     private function formatRecord(KycRecord $record): array
