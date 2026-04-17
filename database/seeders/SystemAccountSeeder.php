@@ -31,7 +31,7 @@ class SystemAccountSeeder extends Seeder
                     'code'           => "ESCROW-{$currency}",
                     'type'           => 'escrow',
                     'currency_code'  => $currency,
-                    'normal_balance' => 'debit',
+                    'normal_balance' => 'credit',
                     'corridor'       => null,
                 ],
                 [
@@ -52,7 +52,7 @@ class SystemAccountSeeder extends Seeder
                     'code'           => "{$currency}-POOL",
                     'type'           => 'system',
                     'currency_code'  => $currency,
-                    'normal_balance' => 'debit',
+                    'normal_balance' => 'credit',
                     'corridor'       => null,
                 ],
             ];
@@ -76,7 +76,7 @@ class SystemAccountSeeder extends Seeder
                     'code'           => "GUARANTEE-{$from}-{$to}",
                     'type'           => 'guarantee',
                     'currency_code'  => $from,
-                    'normal_balance' => 'debit',
+                    'normal_balance' => 'credit',
                     'corridor'       => "{$from}-{$to}",
                 ]);
 
