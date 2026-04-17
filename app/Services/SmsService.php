@@ -30,29 +30,63 @@ class SmsService
     }
 
     public function send(array $payload): void
-    {
-        $type = $payload["type"] ?? null;
-        if (!$type) throw new \RuntimeException("SMS payload missing type");
+{
+    $type = $payload["type"] ?? null;
 
-        match ($type) {
-            "transfer_completed" => $this->sendTransferCompleted($payload),
-            "transfer_refunded"  => $this->sendTransferRefunded($payload),
-            "transfer_failed"    => $this->sendTransferFailed($payload),
-            "otp"                => $this->sendOtp($payload),
-            "kyc_approved"       => $this->sendKycApproved($payload),
-            "kyc_rejected"       => $this->sendKycRejected($payload),
-            "topup_completed"      => $this->sendTopupCompleted($payload),
-            "topup_failed"         => $this->sendTopupFailed($payload),
-            "transfer_sent"        => $this->sendTransferSent($payload),
-            "transfer_received"    => $this->sendTransferReceived($payload),
-            "transfer_held"        => $this->sendTransferHeld($payload),
-            "pending_claim"        => $this->sendPendingClaim($payload),
-            "claim_released"       => $this->sendClaimReleased($payload),
-            "claim_expired_refund" => $this->sendClaimExpiredRefund($payload),
-            default => throw new \RuntimeException("Unknown SMS type: {$type}"),
-        };
+    if (!$type) {
+        Log::warning("SMS payload missing type", $payload);
+        return;
     }
 
+    match ($type) {
+        "transfer_completed" => $this->sendTransferCompleted($payload),
+        "transfer_refunded"  => $this->sendTransferRefunded($payload),
+        "transfer_failed"    => $this->sendTransferFailed($payload),
+        "otp"                => $this->sendOtp($payload),
+        "kyc_approved"       => $this->sendKycApproved($payload),
+        "kyc_rejected"       => $this->sendKycRejected($payload),
+        "topup_completed"    => $this->sendTopupCompleted($payload),
+        "topup_failed"       => $this->sendTopupFailed($payload),
+        "transfer_sent"      => $this->sendTransferSent($payload),
+        "transfer_received"  => $this->sendTransferReceived($payload),
+        "transfer_held"      => $this->sendTransferHeld($payload),
+        "pending_claim"      => $this->sendPendingClaim($payload),
+        "claim_released"     => $this->sendClaimReleased($payload),
+        "claim_expired_refund" => $this->sendClaimExpiredRefund($payload),
+
+        //  add withdrawal handlers
+        "withdrawal_completed" => $this->sendWithdrawalCompleted($payload),
+        "withdrawal_failed"    => $this->sendWithdrawalFailed($payload),
+
+        default => Log::warning("Unknown SMS type ignored", [
+            "type" => $type,
+            "payload" => $payload,
+        ]),
+    };
+}
+
+private function sendWithdrawalCompleted(array $payload): void
+{
+    $amount = number_format((float)($payload["amount"] ?? 0), 2);
+
+    $this->dispatch(
+        phone: $this->formatPhone($payload["phone"], $payload["country_code"] ?? "MWI"),
+        message: "UlendoPay: Your withdrawal of {$amount} {$payload["currency"]} has been completed. Ref: {$payload["reference"]}",
+        context: "withdrawal_completed:{$payload["reference"]}"
+    );
+}
+
+private function sendWithdrawalFailed(array $payload): void
+{
+    $amount = number_format((float)($payload["amount"] ?? 0), 2);
+    $reason = $payload["reason"] ?? "Transaction failed";
+
+    $this->dispatch(
+        phone: $this->formatPhone($payload["phone"], $payload["country_code"] ?? "MWI"),
+        message: "UlendoPay: Withdrawal of {$amount} {$payload["currency"]} failed. Reason: {$reason}. Ref: {$payload["reference"]}",
+        context: "withdrawal_failed:{$payload["reference"]}"
+    );
+}
     public function sendOtp(array $payload): void
     {
         if (empty($payload["phone"]) || empty($payload["otp"]) || empty($payload["country_code"])) {
