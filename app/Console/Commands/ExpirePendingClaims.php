@@ -32,34 +32,37 @@ class ExpirePendingClaims extends Command
         foreach ($expired as $claim) {
             try {
                 DB::transaction(function () use ($claim, $ledger) {
-                    $reference = $claim->transaction->reference_number;
-                    $currency  = $claim->currency_code;
+                    $reference    = $claim->transaction->reference_number;
+                    $sendCurrency = $claim->transaction->send_currency;
+                    $sendAmount   = (float) $claim->transaction->send_amount;
 
                     $escrowAccount = Account::where('type', 'escrow')
-                        ->where('currency_code', $currency)
+                        ->where('currency_code', $sendCurrency)
                         ->firstOrFail();
 
                     $senderAccount = Account::where('owner_id', $claim->transaction->sender_id)
                         ->where('owner_type', \App\Models\User::class)
                         ->where('type', 'user_wallet')
-                        ->where('currency_code', $currency)
+                        ->where('currency_code', $sendCurrency)
                         ->firstOrFail();
+
+                    $refundAmount = $sendAmount - (float) $claim->transaction->fee_amount;
 
                     $ledger->post(
                         reference:   "TXN-{$reference}-EXPIRE",
                         type:        'adjustment',
-                        currency:    $currency,
+                        currency:    $sendCurrency,
                         entries: [
                             [
                                 'account_id'  => $escrowAccount->id,
                                 'type'        => 'debit',
-                                'amount'      => $claim->amount,
+                                'amount'      => $refundAmount,
                                 'description' => "Expired claim refund: {$reference}",
                             ],
                             [
                                 'account_id'  => $senderAccount->id,
                                 'type'        => 'credit',
-                                'amount'      => $claim->amount,
+                                'amount'      => $refundAmount,
                                 'description' => "Refund — unclaimed transfer: {$reference}",
                             ],
                         ],

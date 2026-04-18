@@ -45,7 +45,7 @@ class LedgerService
             $totalDebits  = $this->sumSide($entries, 'debit');
             $totalCredits = $this->sumSide($entries, 'credit');
 
-            if (bccomp((string)$totalDebits, (string)$totalCredits, 6) !== 0) {
+            if (bccomp(number_format((float)$totalDebits, 6, ".", ""), number_format((float)$totalCredits, 6, ".", ""), 6) !== 0) {
                 throw new \RuntimeException(
                     "Journal entries do not balance. " .
                     "Debits: {$totalDebits}, Credits: {$totalCredits}"

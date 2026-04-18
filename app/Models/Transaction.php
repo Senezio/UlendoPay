@@ -10,7 +10,8 @@ class Transaction extends Model
         'send_amount','send_currency','receive_amount','receive_currency',
         'locked_rate','fee_amount','guarantee_contribution','partner_reference',
         'status','failure_reason','disbursement_attempts',
-        'last_attempt_at','next_attempt_at','escrowed_at','completed_at','refunded_at'
+        'last_attempt_at','next_attempt_at','escrowed_at','completed_at','refunded_at',
+        'flagged_for_review','risk_score','fraud_context',
     ];
     protected $casts = [
         'send_amount'            => 'decimal:6',
@@ -23,6 +24,7 @@ class Transaction extends Model
         'escrowed_at'            => 'datetime',
         'completed_at'           => 'datetime',
         'refunded_at'            => 'datetime',
+        'fraud_context'          => 'array',
     ];
 
     public function sender()           { return $this->belongsTo(User::class, 'sender_id'); }

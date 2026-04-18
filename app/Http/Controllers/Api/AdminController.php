@@ -12,6 +12,7 @@ use App\Models\FraudAlert;
 use App\Models\AuditLog;
 use App\Services\KycService;
 use App\Models\Partner;
+use App\Models\PartnerCorridor;
 use App\Services\RateEngine;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;

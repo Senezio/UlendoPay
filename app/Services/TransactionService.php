@@ -11,6 +11,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\IdempotencyService;
 use App\Services\LedgerService;
+use App\Services\FraudDetectionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Carbon;
@@ -18,8 +19,9 @@ use Illuminate\Support\Carbon;
 class TransactionService
 {
     public function __construct(
-        private LedgerService      $ledger,
-        private IdempotencyService $idempotency
+        private LedgerService         $ledger,
+        private IdempotencyService    $idempotency,
+        private FraudDetectionService $fraud
     ) {}
 
     /**
@@ -138,6 +140,14 @@ class TransactionService
                         ->where('currency_code', $sendCurrency)->firstOrFail();
                 }
 
+                // ── 3b. Fraud detection ─────────────────────────────────
+                $fraudAnalysis = $this->fraud->analyse(
+                    $sender,
+                    $recipient,
+                    $sendAmount,
+                    $sendCurrency ?? $rateLock->from_currency
+                );
+
                 // ── 4. Create transaction record ─────────────────────────
                 $reference = $this->generateReference();
 
@@ -154,7 +164,15 @@ class TransactionService
                     'fee_amount'             => $feeAmount,
                     'guarantee_contribution' => $guaranteeAmount,
                     'status'                 => 'initiated',
+                    'flagged_for_review'     => $fraudAnalysis['flagged'],
+                    'risk_score'             => $fraudAnalysis['score'],
+                    'fraud_context'          => $fraudAnalysis['triggered_rules'],
                 ]);
+
+                // Create fraud alert if flagged
+                if ($fraudAnalysis['flagged']) {
+                    $this->fraud->createAlert($transaction, $fraudAnalysis);
+                }
 
                 if ($isSameCurrency) {
                     // ── Same-currency: find recipient by phone ────────────
