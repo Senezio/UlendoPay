@@ -49,6 +49,16 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
+        // Return ValidationException messages as proper 422 responses
+        $exceptions->render(function (\Illuminate\Validation\ValidationException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'errors'  => $e->errors(),
+                ], 422);
+            }
+        });
+
         // Catch-all: never expose raw 500 errors to API clients
         $exceptions->render(function (\Throwable $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {

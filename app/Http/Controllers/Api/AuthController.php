@@ -15,12 +15,18 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use App\Services\RateLimiterService;
+use App\Services\TwoFactorAuthService;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    public function __construct(private readonly OtpService $otpService) {}
+    public function __construct(
+        private readonly OtpService $otpService,
+        private readonly RateLimiterService $rateLimiter,
+        private readonly TwoFactorAuthService $twoFactor,
+    ) {}
 
     // ── Registration ─────────────────────────────────────────────────────────
 
@@ -177,6 +183,7 @@ class AuthController extends Controller
         if (app()->environment('local')) {
             auth()->login($user);
             RateLimiter::clear($throttleKey);
+            $this->rateLimiter->clear($throttleKey, 'login');
 
             return response()->json([
                 'message'   => 'Login successful (Local Environment).',
@@ -190,6 +197,7 @@ class AuthController extends Controller
         $this->otpService->send($user, 'login_2fa');
 
         RateLimiter::clear($throttleKey);
+        $this->rateLimiter->clear($throttleKey, 'login');
 
         return response()->json([
             'message'   => 'Verification code sent to your phone.',
@@ -418,8 +426,63 @@ class AuthController extends Controller
         return $user;
     }
 
+    // ── Two-Factor Authentication ─────────────────────────────────────────────
+
+    public function twoFactorSetup(Request $request): JsonResponse
+    {
+        $result = $this->twoFactor->setup($request->user());
+        return response()->json([
+            'secret'         => $result['secret'],
+            'qr_code_url'    => $result['qr_code_url'],
+            'recovery_codes' => $result['recovery_codes'],
+        ]);
+    }
+
+    public function twoFactorEnable(Request $request): JsonResponse
+    {
+        $data = $request->validate(['code' => 'required|string']);
+
+        if (!$this->twoFactor->verify($request->user(), $data['code'])) {
+            throw ValidationException::withMessages([
+                'code' => ['Invalid verification code.'],
+            ]);
+        }
+
+        return response()->json(['message' => 'Two-factor authentication enabled successfully.']);
+    }
+
+    public function twoFactorDisable(Request $request): JsonResponse
+    {
+        $data = $request->validate(['code' => 'required|string']);
+
+        if (!$this->twoFactor->verify($request->user(), $data['code'])) {
+            throw ValidationException::withMessages([
+                'code' => ['Invalid verification code.'],
+            ]);
+        }
+
+        $this->twoFactor->disable($request->user());
+        return response()->json(['message' => 'Two-factor authentication disabled.']);
+    }
+
+    public function twoFactorStatus(Request $request): JsonResponse
+    {
+        $user      = $request->user();
+        $twoFactor = $user->twoFactorAuth;
+        return response()->json([
+            'is_enabled'   => $twoFactor?->is_enabled ?? false,
+            'enabled_at'   => $twoFactor?->enabled_at,
+            'last_used_at' => $twoFactor?->last_used_at,
+        ]);
+    }
+
     private function throttle(string $key, int $maxAttempts, int $decayMinutes): void
     {
+        // Also attempt DB-backed rate limiting
+        $action = explode(':', $key)[0];
+        $this->rateLimiter->attempt($key, $action);
+
+        // Fallback to Laravel facade for fine-grained control
         if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
             $seconds = RateLimiter::availableIn($key);
             throw ValidationException::withMessages([
