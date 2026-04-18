@@ -327,7 +327,14 @@ class AuthController extends Controller
         $user = User::where('email', $data['email'])->first();
 
         if ($user && $user->isActive()) {
-            $this->otpService->send($user, 'password_reset');
+            $this->otpService->send($user, 'password_reset', 'email');
+
+            // Also store in password_reset_tokens for standard compatibility
+            DB::table('password_reset_tokens')->upsert([
+                'email'      => $user->email,
+                'token'      => Hash::make($user->email . now()->timestamp),
+                'created_at' => now(),
+            ], ['email']);
         }
 
         return response()->json([
@@ -359,6 +366,9 @@ class AuthController extends Controller
 
         // Revoke all tokens — force re-login after password reset
         $user->tokens()->delete();
+
+        // Clear password reset token
+        DB::table('password_reset_tokens')->where('email', $user->email)->delete();
 
         AuditLog::create([
             'user_id'     => $user->id,

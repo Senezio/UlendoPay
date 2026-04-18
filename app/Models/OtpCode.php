@@ -13,6 +13,7 @@ class OtpCode extends Model
         'code_hash',
         'type',
         'delivery_phone',
+        'delivery_email',
         'is_used',
         'expires_at',
         'used_at',
