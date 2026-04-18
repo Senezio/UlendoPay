@@ -15,7 +15,7 @@ class FraudDetectionService
 
     // Rule scores
     const SCORE_VELOCITY        = 40;
-    const SCORE_DAILY_LIMIT     = 50;
+    const SCORE_DAILY_LIMIT     = 70;
     const SCORE_UNUSUAL_HOURS   = 20;
     const SCORE_RECIPIENT_MULTI = 30;
 

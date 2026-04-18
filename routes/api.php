@@ -80,6 +80,7 @@ Route::prefix('v1')->group(function () {
 
             Route::get("/accounts", [AdminController::class, "accounts"]);
             // KYC
+            Route::get('/settings',               [AdminController::class, 'settings']);
             Route::get('/kyc/queue',             [AdminController::class, 'kycQueue']);
             Route::get('/kyc/{id}',              [AdminController::class, 'kycShow']);
             Route::post('/kyc/{id}/approve',     [AdminController::class, 'kycApprove'])

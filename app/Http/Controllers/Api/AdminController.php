@@ -626,6 +626,52 @@ class AdminController extends Controller
         return response()->json(["message" => "Account created.", "account" => $account], 201);
     }
 
+    // ── Settings ──────────────────────────────────────────────────────────────
+
+    public function settings(): JsonResponse
+    {
+        $mask = fn($val) => $val ? '••••••' . substr($val, -6) : null;
+
+        return response()->json([
+            'services' => [
+                'pawapay' => [
+                    'label'       => 'PawaPay',
+                    'environment' => config('services.pawapay.base_url') === 'https://api.pawapay.io' ? 'production' : 'sandbox',
+                    'configured'  => !empty(config('services.pawapay.api_token')),
+                    'preview'     => $mask(config('services.pawapay.api_token')),
+                    'base_url'    => config('services.pawapay.base_url'),
+                ],
+                'mtn_momo_collection' => [
+                    'label'       => 'MTN MoMo (Collection)',
+                    'environment' => config('services.mtn_momo.environment'),
+                    'configured'  => !empty(config('services.mtn_momo.collection.api_key')),
+                    'preview'     => $mask(config('services.mtn_momo.collection.api_key')),
+                    'base_url'    => config('services.mtn_momo.base_url'),
+                ],
+                'mtn_momo_disbursement' => [
+                    'label'       => 'MTN MoMo (Disbursement)',
+                    'environment' => config('services.mtn_momo.environment'),
+                    'configured'  => !empty(config('services.mtn_momo.disbursement.api_key')),
+                    'preview'     => $mask(config('services.mtn_momo.disbursement.api_key')),
+                    'base_url'    => config('services.mtn_momo.base_url'),
+                ],
+                'africastalking' => [
+                    'label'       => "Africa's Talking (SMS)",
+                    'environment' => config('services.africastalking.username') === 'sandbox' ? 'sandbox' : 'production',
+                    'configured'  => !empty(config('services.africastalking.api_key')),
+                    'preview'     => $mask(config('services.africastalking.api_key')),
+                    'base_url'    => 'https://api.africastalking.com',
+                ],
+            ],
+            'app' => [
+                'url'         => config('app.url'),
+                'environment' => config('app.env'),
+                'debug'       => config('app.debug'),
+                'timezone'    => config('app.timezone'),
+            ],
+        ]);
+    }
+
     // ── Partner Management ────────────────────────────────────────────────────
 
     /**
