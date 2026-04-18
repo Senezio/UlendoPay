@@ -87,7 +87,7 @@ class ExpirePendingClaims extends Command
                             'type'      => 'claim_expired_refund',
                             'phone'     => $claim->transaction->sender->phone,
                             'amount'    => $claim->amount,
-                            'currency'  => $currency,
+                            'currency'  => $sendCurrency,
                             'reference' => $reference,
                         ],
                         'status'          => 'pending',
