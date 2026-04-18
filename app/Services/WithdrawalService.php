@@ -107,7 +107,7 @@ class WithdrawalService
         }
 
         // Check sufficient balance
-        $userAccount = Account::where('code', "USR-{$user->id}-{$currency}")->first();
+        $userAccount = Account::where('owner_id', $user->id)->where('owner_type', App\Models\User::class)->where('type', 'user_wallet')->where('currency_code', $currency)->first();
 
         if (!$userAccount) {
             throw new \RuntimeException("Wallet account not found.");
@@ -126,7 +126,7 @@ class WithdrawalService
         if ($mtnMomo->supportsCurrency($currency)) {
             $countryCode = $user->country_code ?? $this->currencyToCountry($currency);
             $withdrawal = DB::transaction(function () use ($user, $wallet, $amount, $currency, $phoneNumber, $mobileOperator, $countryCode) {
-                $userAccount = Account::where('code', "USR-{$user->id}-{$currency}")->lockForUpdate()->firstOrFail();
+                $userAccount = Account::where('owner_id', $user->id)->where('owner_type', App\Models\User::class)->where('type', 'user_wallet')->where('currency_code', $currency)->lockForUpdate()->firstOrFail();
                 $systemAccount = Account::where('code', "{$currency}-POOL")->lockForUpdate()->firstOrFail();
                 $withdrawal = Withdrawal::create([
                     'reference'       => Withdrawal::generateReference(),
@@ -176,7 +176,7 @@ class WithdrawalService
             $user, $wallet, $amount, $currency, $phoneNumber,
             $mobileOperator, $countryCode, $correspondent, $pawapayPayoutId
         ) {
-            $userAccount = Account::where('code', "USR-{$user->id}-{$currency}")
+            $userAccount = Account::where('owner_id', $user->id)->where('owner_type', App\Models\User::class)->where('type', 'user_wallet')->where('currency_code', $currency)
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -403,7 +403,7 @@ class WithdrawalService
     private function refundWallet(Withdrawal $withdrawal, string $reason): void
     {
         DB::transaction(function () use ($withdrawal, $reason) {
-            $userAccount = Account::where('code', "USR-{$withdrawal->user_id}-{$withdrawal->currency_code}")
+            $userAccount = Account::where('owner_id', $withdrawal->user_id)->where('owner_type', App\Models\User::class)->where('type', 'user_wallet')->where('currency_code', $withdrawal->currency_code)
                 ->lockForUpdate()
                 ->firstOrFail();
 

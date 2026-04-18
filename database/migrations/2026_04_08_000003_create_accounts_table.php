@@ -10,7 +10,7 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('accounts', function (Blueprint $table) {
             $table->id();
-            $table->string('code')->unique(); // e.g. USR-1-MWK, ESCROW-MWK, FEE-MWK
+            $table->string('code')->unique(); // e.g. 3281321404 (user wallet), ESCROW-MWK, FEE-MWK
             $table->enum('type', [
                 'user_wallet',   // belongs to a user
                 'escrow',        // funds held during transfer

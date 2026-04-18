@@ -220,7 +220,7 @@ class MtnMomoService
     public function creditWallet(TopUp $topUp): void
     {
         DB::transaction(function () use ($topUp) {
-            $userAccount = Account::where('code', "USR-{$topUp->user_id}-{$topUp->currency_code}")
+            $userAccount = Account::where('owner_id', $topUp->user_id)->where('owner_type', App\Models\User::class)->where('type', 'user_wallet')->where('currency_code', $topUp->currency_code)
                 ->lockForUpdate()->firstOrFail();
 
             $systemAccount = Account::where('code', "{$topUp->currency_code}-POOL")
@@ -255,7 +255,7 @@ class MtnMomoService
     public function refundWallet(Withdrawal $withdrawal, string $reason): void
     {
         DB::transaction(function () use ($withdrawal, $reason) {
-            $userAccount = Account::where('code', "USR-{$withdrawal->user_id}-{$withdrawal->currency_code}")
+            $userAccount = Account::where('owner_id', $withdrawal->user_id)->where('owner_type', App\Models\User::class)->where('type', 'user_wallet')->where('currency_code', $withdrawal->currency_code)
                 ->lockForUpdate()->firstOrFail();
 
             $systemAccount = Account::where('code', "{$withdrawal->currency_code}-POOL")
