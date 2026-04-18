@@ -389,8 +389,11 @@ class TransactionService
                             ->first();
 
                         if ($recipientAccount) {
-                            $escrowAccount = Account::where('type', 'escrow')
-                                ->where('currency_code', $receiveCurrency)
+                            // Debit the receive-currency POOL (not escrow) —
+                            // the send-side MWK escrow already holds the funds.
+                            // ZMW escrow was never funded so debiting it causes negative balance.
+                            $receivePoolAccount = Account::where('type', 'system')
+                                ->where('code', "{$receiveCurrency}-POOL")
                                 ->firstOrFail();
 
                             $this->ledger->post(
@@ -399,7 +402,7 @@ class TransactionService
                                 currency:    $receiveCurrency,
                                 entries: [
                                     [
-                                        'account_id'  => $escrowAccount->id,
+                                        'account_id'  => $receivePoolAccount->id,
                                         'type'        => 'debit',
                                         'amount'      => $receiveAmount,
                                         'description' => "Disbursement release: {$reference}",
