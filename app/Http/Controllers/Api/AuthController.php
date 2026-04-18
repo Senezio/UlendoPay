@@ -448,7 +448,7 @@ class AuthController extends Controller
 
         // Create account
         $account = \App\Models\Account::create([
-            'code'           => (function() { do { $c = (string)random_int(1,9).str_pad(random_int(0,999999999),9,'0',STR_PAD_LEFT); } while(substr($c,-1)==='0' || \App\Models\Account::where('code',$c)->exists()); return $c; })(),
+            'code'           => (function() { do { $c = (string)random_int(1,9).str_pad(random_int(0,99999999),8,'0',STR_PAD_LEFT).random_int(1,9); } while(\App\Models\Account::where('code',$c)->exists()); return $c; })(),
             'type'           => 'user_wallet',
             'currency_code'  => $currency,
             'owner_id'       => $user->id,
