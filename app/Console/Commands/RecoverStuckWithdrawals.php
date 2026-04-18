@@ -14,9 +14,17 @@ class RecoverStuckWithdrawals extends Command
 
     public function handle(WithdrawalService $withdrawalService): int
     {
-        $stuck = Withdrawal::where('status', 'initiated')
+        // Handle initiated withdrawals stuck for > 15 minutes — refund immediately
+        $initiatedStuck = Withdrawal::where('status', 'initiated')
             ->where('initiated_at', '<', now()->subMinutes(15))
             ->get();
+
+        // Handle pending withdrawals stuck for > 60 minutes — PawaPay webhook never arrived
+        $pendingStuck = Withdrawal::where('status', 'pending')
+            ->where('updated_at', '<', now()->subMinutes(60))
+            ->get();
+
+        $stuck = $initiatedStuck->merge($pendingStuck);
 
         if ($stuck->isEmpty()) {
             $this->info('No stuck withdrawals found.');
@@ -27,9 +35,16 @@ class RecoverStuckWithdrawals extends Command
 
         foreach ($stuck as $withdrawal) {
             try {
-                $withdrawalService->refundStuck($withdrawal);
-                $this->info("✓ Refunded withdrawal {$withdrawal->reference}");
-                Log::info('[RecoverStuckWithdrawals] Refunded', ['reference' => $withdrawal->reference]);
+                if ($withdrawal->status === 'initiated') {
+                    $withdrawalService->refundStuck($withdrawal);
+                    $this->info("✓ Refunded initiated withdrawal {$withdrawal->reference}");
+                    Log::info('[RecoverStuckWithdrawals] Refunded initiated', ['reference' => $withdrawal->reference]);
+                } elseif ($withdrawal->status === 'pending') {
+                    // Pending = PawaPay accepted but webhook never arrived — refund safely
+                    $withdrawalService->refundPendingStuck($withdrawal);
+                    $this->info("✓ Refunded pending withdrawal {$withdrawal->reference}");
+                    Log::info('[RecoverStuckWithdrawals] Refunded pending', ['reference' => $withdrawal->reference]);
+                }
             } catch (\Throwable $e) {
                 $this->error("✗ Failed to refund {$withdrawal->reference}: {$e->getMessage()}");
                 Log::error('[RecoverStuckWithdrawals] Failed', [

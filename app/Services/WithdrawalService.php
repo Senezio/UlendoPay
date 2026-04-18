@@ -392,6 +392,14 @@ class WithdrawalService
      * Refund wallet when withdrawal fails or is rejected.
      * Reverses the debit posted during initiation.
      */
+    public function refundPendingStuck(Withdrawal $withdrawal): void
+    {
+        if ($withdrawal->status !== 'pending') {
+            throw new \RuntimeException("Withdrawal {$withdrawal->reference} is not in pending state.");
+        }
+        $this->refundWallet($withdrawal, 'Auto-recovery: withdrawal stuck in pending state for over 60 minutes — no webhook received');
+    }
+
     public function refundStuck(Withdrawal $withdrawal): void
     {
         if ($withdrawal->status !== 'initiated') {
