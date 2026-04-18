@@ -392,6 +392,14 @@ class WithdrawalService
      * Refund wallet when withdrawal fails or is rejected.
      * Reverses the debit posted during initiation.
      */
+    public function refundStuck(Withdrawal $withdrawal): void
+    {
+        if ($withdrawal->status !== 'initiated') {
+            throw new \RuntimeException("Withdrawal {$withdrawal->reference} is not in initiated state.");
+        }
+        $this->refundWallet($withdrawal, 'Auto-recovery: withdrawal stuck in initiated state for over 15 minutes');
+    }
+
     private function refundWallet(Withdrawal $withdrawal, string $reason): void
     {
         DB::transaction(function () use ($withdrawal, $reason) {

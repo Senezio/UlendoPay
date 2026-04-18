@@ -54,6 +54,15 @@ Schedule::command('idempotency:prune')
         Log::error('[scheduler] idempotency:prune FAILED');
     });
 
+// ── Recover stuck withdrawals ────────────────────────────────────────────────
+// Runs every 15 minutes — refunds withdrawals stuck in initiated for >15 mins
+Schedule::command('withdrawals:recover')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->onFailure(function () {
+        Log::error('[scheduler] withdrawals:recover FAILED');
+    });
+
 // ── Expire unclaimed pending transfers ───────────────────────────────────────
 // Runs every hour — refunds transfers not claimed within 48 hours
 Schedule::command('claims:expire')
