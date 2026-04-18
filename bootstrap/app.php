@@ -41,4 +41,25 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['message' => 'Unauthenticated.'], 401);
             }
         });
+
+        // Return RuntimeException messages as friendly JSON 422 responses
+        $exceptions->render(function (\RuntimeException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        });
+
+        // Catch-all: never expose raw 500 errors to API clients
+        $exceptions->render(function (\Throwable $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                \Illuminate\Support\Facades\Log::error('Unhandled exception', [
+                    'message' => $e->getMessage(),
+                    'file'    => $e->getFile(),
+                    'line'    => $e->getLine(),
+                ]);
+                return response()->json([
+                    'message' => 'Something went wrong. Please try again or contact support.'
+                ], 500);
+            }
+        });
     })->create();

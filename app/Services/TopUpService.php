@@ -171,7 +171,7 @@ class TopUpService
                     'failed_at' => now(),
                 ]);
 
-                throw new \RuntimeException("Payment initiation rejected: {$reason}");
+                throw new \RuntimeException($this->friendlyRejectionMessage($reason));
             }
 
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
@@ -399,4 +399,29 @@ class TopUpService
         });
     }
 
+
+    private function friendlyRejectionMessage(string $code): string
+    {
+        return match($code) {
+            'AMOUNT_TOO_LARGE'           => 'The amount exceeds the maximum allowed for a single transaction. Please try a smaller amount.',
+            'AMOUNT_TOO_SMALL'           => 'The amount is below the minimum allowed. Please enter a larger amount.',
+            'INSUFFICIENT_FUNDS'         => 'Your mobile money account has insufficient funds. Please top up your mobile wallet and try again.',
+            'INVALID_CALLBACK_URL'       => 'Payment could not be processed. Please contact support.',
+            'INVALID_CORRESPONDENT'      => 'This mobile network is not supported for this transaction.',
+            'INVALID_CURRENCY'           => 'The currency used is not supported for this transaction.',
+            'INVALID_MSISDN'             => 'The phone number entered is invalid. Please check and try again.',
+            'LIMIT_REACHED'              => 'You have reached your daily or monthly transaction limit on your mobile wallet.',
+            'NOT_ALLOWED'                => 'This transaction is not permitted on your account. Please contact your mobile network.',
+            'NOT_ALLOWED_COUNTRY'        => 'Transactions from your country are currently not supported.',
+            'PAYEE_REJECTED'             => 'The payment was declined by your mobile network. Please try again or contact your network provider.',
+            'PAYER_LIMIT_REACHED'        => 'You have reached your transaction limit. Please try again tomorrow or contact your mobile network.',
+            'RECEIVER_INVALID'           => 'The recipient phone number is invalid. Please check and try again.',
+            'REQUEST_CANCELLED'          => 'The payment request was cancelled. Please try again.',
+            'SERVICE_UNAVAILABLE'        => 'The mobile payment service is temporarily unavailable. Please try again in a few minutes.',
+            'SYSTEM_ERROR'               => 'A system error occurred. Please try again or contact support.',
+            'TIMED_OUT'                  => 'The payment request timed out. Please try again.',
+            'UNSPECIFIED_REJECTION'      => 'Your payment was declined. Please try again or contact your mobile network provider.',
+            default                      => 'Your payment could not be processed. Please try again or contact support.',
+        };
+    }
 }
