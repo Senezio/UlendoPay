@@ -34,6 +34,11 @@ class RecipientController extends Controller
             'bank_branch_code'    => 'nullable|string',
         ]);
 
+        // Sanitize text fields — strip any HTML/script tags
+        if (isset($data['full_name'])) {
+            $data['full_name'] = strip_tags($data['full_name']);
+        }
+
         $recipient = $request->user()->recipients()->create($data);
 
         return response()->json([

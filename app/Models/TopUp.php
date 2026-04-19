@@ -28,6 +28,12 @@ class TopUp extends Model
         'failed_at',
     ];
 
+    protected $hidden = [
+        'pawapay_request_payload',
+        'pawapay_response_payload',
+        'pawapay_webhook_payload',
+    ];
+
     protected $casts = [
         'amount'                   => 'decimal:6',
         'pawapay_request_payload'  => 'array',

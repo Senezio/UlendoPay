@@ -52,7 +52,15 @@ class TransactionController extends Controller
             ->latest()
             ->paginate(20);
 
-        return response()->json($transactions);
+        return response()->json([
+            'data'         => $transactions->map(fn($t) => $this->formatTransaction($t)),
+            'current_page' => $transactions->currentPage(),
+            'last_page'    => $transactions->lastPage(),
+            'per_page'     => $transactions->perPage(),
+            'total'        => $transactions->total(),
+            'from'         => $transactions->firstItem(),
+            'to'           => $transactions->lastItem(),
+        ]);
     }
 
     public function show(Request $request, string $reference): JsonResponse

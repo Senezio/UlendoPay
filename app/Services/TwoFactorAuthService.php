@@ -14,21 +14,34 @@ class TwoFactorAuthService
      */
     public function setup(User $user): array
     {
-        $chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; $secret = implode("", array_map(fn() => $chars[random_int(0, 31)], array_fill(0, 32, null)));
+        $existing = TwoFactorAuth::where('user_id', $user->id)->first();
 
-        $twoFactor = TwoFactorAuth::updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'secret_encrypted'          => encrypt($secret),
-                'recovery_codes_encrypted'  => encrypt(json_encode($this->generateRecoveryCodes())),
-                'is_enabled'                => false,
-            ]
-        );
+        // Return existing secret if one already exists (enabled or pending confirmation)
+        // Never silently rotate - user may have already scanned the QR code
+        if ($existing) {
+            $secret = $existing->getSecret();
+            return [
+                'secret'         => $secret,
+                'qr_code_url'    => $this->generateQrUrl($user, $secret),
+                'recovery_codes' => $existing->getRecoveryCodes(),
+            ];
+        }
+
+        // No record exists yet - generate fresh secret
+        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $secret = implode('', array_map(fn() => $chars[random_int(0, 31)], array_fill(0, 32, null)));
+
+        $twoFactor = TwoFactorAuth::create([
+            'user_id'                  => $user->id,
+            'secret_encrypted'         => encrypt($secret),
+            'recovery_codes_encrypted' => encrypt(json_encode($this->generateRecoveryCodes())),
+            'is_enabled'               => false,
+        ]);
 
         return [
-            'secret'        => $secret,
-            'qr_code_url'   => $this->generateQrUrl($user, $secret),
-            'recovery_codes'=> $twoFactor->getRecoveryCodes(),
+            'secret'         => $secret,
+            'qr_code_url'    => $this->generateQrUrl($user, $secret),
+            'recovery_codes' => $twoFactor->getRecoveryCodes(),
         ];
     }
 
@@ -103,8 +116,8 @@ class TwoFactorAuthService
      */
     private function generateQrUrl(User $user, string $secret): string
     {
-        $label   = urlencode('UlendoPay:' . ($user->email ?? $user->phone));
-        $issuer  = urlencode('UlendoPay');
+        $label  = urlencode('UlendoPay:' . ($user->email ?? $user->phone));
+        $issuer = urlencode('UlendoPay');
         return "otpauth://totp/{$label}?secret={$secret}&issuer={$issuer}&algorithm=SHA1&digits=6&period=30";
     }
 }
