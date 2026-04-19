@@ -19,11 +19,10 @@ class RefundService
      * Refund a failed transaction back to the sender's wallet.
      *
      * Money flow:
-     *   DEBIT  escrow account     <- escrowAmount
+     *   DEBIT  escrow account     <- escrowAmount (send_amount - fee - guarantee)
      *   DEBIT  guarantee account  <- guaranteeAmount
-     *   CREDIT sender wallet      <- refundAmount
-     *
-     * Fee is NOT refunded -- platform keeps it for the attempt.
+     *   DEBIT  fee account        <- feeAmount
+     *   CREDIT sender wallet      <- send_amount (full refund)
      */
     public function refund(Transaction $transaction): void
     {
@@ -36,10 +35,10 @@ class RefundService
             $sendCurrency    = $transaction->send_currency;
             $receiveCurrency = $transaction->receive_currency;
 
-            $escrowAmount  = $transaction->send_amount
-                - $transaction->fee_amount
-                - $transaction->guarantee_contribution;
-            $refundAmount  = $escrowAmount + $transaction->guarantee_contribution;
+            $feeAmount       = $transaction->fee_amount;
+            $guaranteeAmount = $transaction->guarantee_contribution;
+            $escrowAmount    = $transaction->send_amount - $feeAmount - $guaranteeAmount;
+            $refundAmount    = $transaction->send_amount; // full refund
 
             $senderAccount = Account::where('owner_id', $transaction->sender_id)
                 ->where('owner_type', User::class)
@@ -53,6 +52,10 @@ class RefundService
 
             $guaranteeAccount = Account::where('type', 'guarantee')
                 ->where('corridor', "{$sendCurrency}-{$receiveCurrency}")
+                ->where('currency_code', $sendCurrency)
+                ->firstOrFail();
+
+            $feeAccount = Account::where('type', 'fee')
                 ->where('currency_code', $sendCurrency)
                 ->firstOrFail();
 
@@ -70,17 +73,23 @@ class RefundService
                     [
                         'account_id'  => $guaranteeAccount->id,
                         'type'        => 'debit',
-                        'amount'      => $transaction->guarantee_contribution,
+                        'amount'      => $guaranteeAmount,
                         'description' => "Refund guarantee return: {$transaction->reference_number}",
+                    ],
+                    [
+                        'account_id'  => $feeAccount->id,
+                        'type'        => 'debit',
+                        'amount'      => $feeAmount,
+                        'description' => "Refund fee return: {$transaction->reference_number}",
                     ],
                     [
                         'account_id'  => $senderAccount->id,
                         'type'        => 'credit',
                         'amount'      => $refundAmount,
-                        'description' => "Refund received: {$transaction->reference_number}",
+                        'description' => "Full refund received: {$transaction->reference_number}",
                     ],
                 ],
-                description: "Refund for failed transfer {$transaction->reference_number}"
+                description: "Full refund for failed transfer {$transaction->reference_number}"
             );
 
             $now = now();
@@ -100,7 +109,7 @@ class RefundService
                     'status'        => 'refunded',
                     'refunded_at'   => $now,
                     'refund_amount' => $refundAmount,
-                    'fee_kept'      => $transaction->fee_amount,
+                    'fee_returned'  => $feeAmount,
                     'currency'      => $sendCurrency,
                 ],
             ]);
@@ -119,11 +128,11 @@ class RefundService
             ]);
 
             Log::info('Transaction refunded successfully', [
-                'reference'     => $transaction->reference_number,
-                'refund_amount' => $refundAmount,
-                'fee_kept'      => $transaction->fee_amount,
-                'currency'      => $sendCurrency,
-                'sender_id'     => $transaction->sender_id,
+                'reference'      => $transaction->reference_number,
+                'refund_amount'  => $refundAmount,
+                'fee_returned'   => $feeAmount,
+                'currency'       => $sendCurrency,
+                'sender_id'      => $transaction->sender_id,
             ]);
         });
     }
