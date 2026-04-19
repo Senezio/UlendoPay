@@ -40,6 +40,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/auth/me',      [AuthController::class, 'me']);
 
         // Two-Factor Authentication
+        Route::get('/auth/account-numbers', [AuthController::class, 'accountNumbers']);
         Route::get('/auth/2fa/setup',    [AuthController::class, 'twoFactorSetup']);
         Route::post('/auth/2fa/enable',  [AuthController::class, 'twoFactorEnable']);
         Route::post('/auth/2fa/disable', [AuthController::class, 'twoFactorDisable']);

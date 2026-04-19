@@ -438,6 +438,24 @@ class AuthController extends Controller
 
     // ── Two-Factor Authentication ─────────────────────────────────────────────
 
+    public function accountNumbers(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $accounts = \App\Models\Account::where('owner_id', $user->id)
+            ->where('owner_type', \App\Models\User::class)
+            ->where('type', 'user_wallet')
+            ->where('is_active', true)
+            ->get(['code', 'currency_code']);
+
+        return response()->json([
+            'accounts' => $accounts->map(fn($a) => [
+                'account_number' => $a->code,
+                'currency'       => $a->currency_code,
+            ])
+        ]);
+    }
+
     public function twoFactorSetup(Request $request): JsonResponse
     {
         $result = $this->twoFactor->setup($request->user());
