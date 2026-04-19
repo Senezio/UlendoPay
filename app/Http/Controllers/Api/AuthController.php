@@ -715,4 +715,140 @@ class AuthController extends Controller
         }
     }
 
+
+    public function verifyPin(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'pin' => 'required|string|size:4',
+        ]);
+
+        if (!$request->user()->verifyPin($data['pin'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'pin' => ['Incorrect PIN. Please try again.'],
+            ]);
+        }
+
+        return response()->json(['verified' => true]);
+    }
+
+
+    /**
+     * List active sessions for the authenticated user.
+     */
+    public function sessions(Request $request): JsonResponse
+    {
+        $tokens = $request->user()->tokens()
+            ->orderByDesc('last_used_at')
+            ->get()
+            ->map(fn($t) => [
+                'id'           => $t->id,
+                'name'         => $t->name,
+                'last_used_at' => $t->last_used_at,
+                'created_at'   => $t->created_at,
+                'is_current'   => $t->id === $request->user()->currentAccessToken()->id,
+            ]);
+
+        return response()->json(['sessions' => $tokens]);
+    }
+
+    /**
+     * Revoke a specific session token.
+     */
+    public function revokeSession(Request $request, int $tokenId): JsonResponse
+    {
+        $token = $request->user()->tokens()->where('id', $tokenId)->first();
+
+        if (!$token) {
+            return response()->json(['message' => 'Session not found.'], 404);
+        }
+
+        if ($token->id === $request->user()->currentAccessToken()->id) {
+            return response()->json(['message' => 'Cannot revoke your current session.'], 422);
+        }
+
+        $token->delete();
+
+        return response()->json(['message' => 'Session revoked.']);
+    }
+
+    /**
+     * Revoke all other sessions except current.
+     */
+    public function revokeAllSessions(Request $request): JsonResponse
+    {
+        $currentTokenId = $request->user()->currentAccessToken()->id;
+
+        $request->user()->tokens()
+            ->where('id', '!=', $currentTokenId)
+            ->delete();
+
+        return response()->json(['message' => 'All other sessions revoked.']);
+    }
+
+    /**
+     * Get audit log for the authenticated user.
+     */
+    public function auditLog(Request $request): JsonResponse
+    {
+        $logs = \App\Models\AuditLog::where('user_id', $request->user()->id)
+            ->whereIn('action', [
+                'login.success',
+                'login.failed',
+                'kyc.submitted',
+                'kyc.approved',
+                'kyc.rejected',
+                'withdrawal.initiated',
+                'topup.initiated',
+                'pin.changed',
+                'password.changed',
+                '2fa.enabled',
+                '2fa.disabled',
+            ])
+            ->latest()
+            ->limit(50)
+            ->get()
+            ->map(fn($log) => [
+                'action'     => $log->action,
+                'ip_address' => $log->ip_address,
+                'created_at' => $log->created_at,
+                'details'    => $log->new_values,
+            ]);
+
+        return response()->json(['logs' => $logs]);
+    }
+
+    /**
+     * Verify email OTP during registration.
+     */
+    public function verifyEmail(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'otp'     => 'nullable|string|size:6',
+            'send'    => 'nullable|boolean',
+        ]);
+
+        $user = \App\Models\User::findOrFail($data['user_id']);
+
+        // Just send the OTP
+        if (!empty($data['send'])) {
+            if (empty($user->email)) {
+                return response()->json(['message' => 'No email address on file.'], 422);
+            }
+            $this->otpService->send($user, 'email_verification', 'email');
+            return response()->json(['message' => 'Verification code sent to your email.']);
+        }
+
+        // Verify the OTP
+        if (!$this->otpService->verify($user, 'email_verification', $data['otp'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'otp' => ['Invalid or expired verification code.'],
+            ]);
+        }
+
+        $user->update(['email_verified_at' => now()]);
+
+        return response()->json(['message' => 'Email verified successfully.']);
+    }
+
 }

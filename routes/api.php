@@ -46,6 +46,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/2fa/enable',  [AuthController::class, 'twoFactorEnable']);
         Route::post('/auth/2fa/disable', [AuthController::class, 'twoFactorDisable']);
         Route::get('/auth/2fa/status',   [AuthController::class, 'twoFactorStatus']);
+        Route::post('/auth/verify-pin',      [AuthController::class, 'verifyPin']);
+        Route::post('/auth/verify-email',    [AuthController::class, 'verifyEmail']);
+        Route::get('/auth/sessions',         [AuthController::class, 'sessions']);
+        Route::delete('/auth/sessions/{id}', [AuthController::class, 'revokeSession']);
+        Route::delete('/auth/sessions',      [AuthController::class, 'revokeAllSessions']);
+        Route::get('/auth/audit-log',        [AuthController::class, 'auditLog']);
 
         // KYC
         Route::get('/kyc/status',        [KycController::class, 'status']);
