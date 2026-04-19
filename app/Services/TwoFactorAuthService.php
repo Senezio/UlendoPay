@@ -14,7 +14,7 @@ class TwoFactorAuthService
      */
     public function setup(User $user): array
     {
-        $secret = Str::upper(Str::random(32));
+        $chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; $secret = implode("", array_map(fn() => $chars[random_int(0, 31)], array_fill(0, 32, null)));
 
         $twoFactor = TwoFactorAuth::updateOrCreate(
             ['user_id' => $user->id],
