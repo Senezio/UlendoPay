@@ -396,6 +396,34 @@ class TransactionService
                                 ->where('code', "{$receiveCurrency}-POOL")
                                 ->firstOrFail();
 
+                            // Release MWK escrow now that recipient is credited
+                            $escrowReleaseAmount = $sendAmount - $feeAmount - $guaranteeAmount;
+                            $escrowAcct = Account::where('type', 'escrow')
+                                ->where('currency_code', $sendCurrency)->firstOrFail();
+                            $sendPoolAcct = Account::where('type', 'system')
+                                ->where('code', "{$sendCurrency}-POOL")->firstOrFail();
+
+                            $this->ledger->post(
+                                reference:   "TXN-{$reference}-ESCROW-RELEASE",
+                                type:        'transfer_completion',
+                                currency:    $sendCurrency,
+                                entries: [
+                                    [
+                                        'account_id'  => $escrowAcct->id,
+                                        'type'        => 'debit',
+                                        'amount'      => $escrowReleaseAmount,
+                                        'description' => "Escrow release for internal transfer: {$reference}",
+                                    ],
+                                    [
+                                        'account_id'  => $sendPoolAcct->id,
+                                        'type'        => 'credit',
+                                        'amount'      => $escrowReleaseAmount,
+                                        'description' => "Pool settlement for internal transfer: {$reference}",
+                                    ],
+                                ],
+                                description: "Escrow release for internal cross-currency transfer: {$reference}"
+                            );
+
                             $this->ledger->post(
                                 reference:   "TXN-{$reference}-CREDIT",
                                 type:        'transfer_credit',
@@ -572,7 +600,7 @@ class TransactionService
      * Called by the outbox worker when max_retries is exhausted.
      *
      * Posts Group 3: Debit escrow + guarantee → Credit sender
-     * Fee is NOT refunded (platform kept it for the attempt).
+     * Fee IS refunded — full amount returned to sender.
      */
     public function reverse(Transaction $transaction, string $reason): void
     {
@@ -596,10 +624,10 @@ class TransactionService
                 ->where('corridor', "{$sendCurrency}-{$receiveCurrency}")
                 ->where('currency_code', $sendCurrency)->firstOrFail();
 
-            $escrowAmount    = $transaction->send_amount
-                - $transaction->fee_amount
-                - $transaction->guarantee_contribution;
-            $refundAmount    = $escrowAmount + $transaction->guarantee_contribution;
+            $feeAmount       = $transaction->fee_amount;
+            $guaranteeAmount = $transaction->guarantee_contribution;
+            $escrowAmount    = $transaction->send_amount - $feeAmount - $guaranteeAmount;
+            $refundAmount    = $transaction->send_amount; // full refund including fee
 
             $this->ledger->post(
                 reference:   "TXN-{$transaction->reference_number}-REVERSAL",
@@ -615,14 +643,21 @@ class TransactionService
                     [
                         'account_id'  => $guaranteeAccount->id,
                         'type'        => 'debit',
-                        'amount'      => $transaction->guarantee_contribution,
+                        'amount'      => $guaranteeAmount,
                         'description' => "Reversal guarantee return {$transaction->reference_number}",
+                    ],
+                    [
+                        'account_id'  => Account::where('type', 'fee')
+                            ->where('currency_code', $sendCurrency)->firstOrFail()->id,
+                        'type'        => 'debit',
+                        'amount'      => $feeAmount,
+                        'description' => "Reversal fee return {$transaction->reference_number}",
                     ],
                     [
                         'account_id'  => $senderAccount->id,
                         'type'        => 'credit',
                         'amount'      => $refundAmount,
-                        'description' => "Refund for failed transfer {$transaction->reference_number}",
+                        'description' => "Full refund for failed transfer {$transaction->reference_number}",
                     ],
                 ],
                 description: "Reversal: {$reason}"
