@@ -193,7 +193,20 @@ class AuthController extends Controller
             ]);
         }
 
-        // Send 2FA OTP (Production/Staging logic)
+        // Check if user has TOTP enabled — use that instead of SMS
+        if ($this->twoFactor->isEnabled($user)) {
+            RateLimiter::clear($throttleKey);
+            $this->rateLimiter->clear($throttleKey, 'login');
+
+            return response()->json([
+                'message'   => 'Enter the code from your authenticator app.',
+                'user_id'   => $user->id,
+                'next_step' => 'verify_totp',
+                'method'    => $data['method'],
+            ]);
+        }
+
+        // Send SMS OTP for users without TOTP
         $this->otpService->send($user, 'login_2fa');
 
         RateLimiter::clear($throttleKey);
@@ -204,6 +217,35 @@ class AuthController extends Controller
             'user_id'   => $user->id,
             'next_step' => 'verify_2fa',
             'method'    => $data['method'],
+        ]);
+    }
+
+    /**
+     * Step 2 of login — verify TOTP code, issue token.
+     */
+    public function verifyTotp(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'code'    => 'required|string',
+        ]);
+
+        $this->throttle("verify_totp:{$data['user_id']}", 5, 10);
+
+        $user = User::findOrFail($data['user_id']);
+
+        if (!$this->twoFactor->verify($user, $data['code'])) {
+            throw ValidationException::withMessages([
+                'code' => ['Invalid or expired authenticator code.'],
+            ]);
+        }
+
+        auth()->login($user);
+
+        return response()->json([
+            'message' => 'Login successful.',
+            'user'    => $user,
+            'token'   => $user->createToken('auth_token')->plainTextToken,
         ]);
     }
 
