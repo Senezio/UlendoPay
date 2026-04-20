@@ -99,6 +99,9 @@ class KycService
 
         $record->user->update(['kyc_status' => 'verified']);
 
+        // Upgrade user tier
+        app(\App\Services\TierService::class)->syncTier($record->user->fresh());
+
         // Notify user via SMS
         app(SmsService::class)->send([
             'type'           => 'kyc_approved',
@@ -142,6 +145,9 @@ class KycService
         ]);
 
         $record->user->update(['kyc_status' => 'rejected']);
+
+        // Sync user tier
+        app(\App\Services\TierService::class)->syncTier($record->user->fresh());
 
         // Notify user via SMS
         app(SmsService::class)->send([

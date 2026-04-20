@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use App\Services\RateLimiterService;
 use App\Services\TwoFactorAuthService;
+use App\Services\TierService;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
@@ -38,7 +39,8 @@ class AuthController extends Controller
         $data = $request->validate([
             'name'         => ['required', 'string', 'max:255', 'regex:/^[\pL\s\'\-\.]+$/u'],
             'phone'        => 'required|string|max:20',
-            'country_code' => 'required|string|size:3',
+            'country_code'  => 'required|string|size:3',
+            'referral_code' => 'nullable|string|max:10',
             'pin'          => 'required|string|size:4|confirmed|regex:/^\d{4}$/',
             'email'        => 'nullable|email|unique:users,email',
             'password'     => ['nullable', 'confirmed', Password::min(8)->mixedCase()->numbers()],
@@ -578,6 +580,14 @@ class AuthController extends Controller
             'MDG', 'MG' => 'MGA',
             default      => 'MWK',
         };
+
+        // Apply referral if provided
+        if (!empty($data['referral_code'])) {
+            app(TierService::class)->applyReferral($user, $data['referral_code']);
+        }
+
+        // Generate referral code for new user
+        app(TierService::class)->generateReferralCode($user);
 
         // Create account
         $account = \App\Models\Account::create([

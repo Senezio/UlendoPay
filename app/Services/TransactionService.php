@@ -11,6 +11,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\IdempotencyService;
 use App\Services\LedgerService;
+use App\Services\TierService;
 use App\Services\FraudDetectionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -84,6 +85,9 @@ class TransactionService
                 $sender, $recipient, $rateLock, $sendAmount
             ) {
                 // ── 2. Validate inputs ───────────────────────────────────
+                // Check tier limits
+                app(TierService::class)->checkLimits($sender, $sendAmount, $rateLock->from_currency);
+
                 if ($rateLock->status !== 'active') {
                     throw new \RuntimeException('Rate lock is no longer active.');
                 }
@@ -104,7 +108,8 @@ class TransactionService
                 $isSameCurrency = $sendCurrency === $receiveCurrency;
 
                 // Fee calculation
-                $feeAmount       = $isSameCurrency ? 0.0 : $this->calculateFee($sendAmount, $rateLock);
+                $rawFee          = $isSameCurrency ? 0.0 : $this->calculateFee($sendAmount, $rateLock);
+                $feeAmount       = $isSameCurrency ? 0.0 : app(TierService::class)->effectiveFee($sender, $rawFee);
                 $guaranteeAmount = $isSameCurrency ? 0.0 : $this->calculateGuarantee($sendAmount, $sendCurrency, $receiveCurrency);
                 $escrowAmount    = $sendAmount - $feeAmount - $guaranteeAmount;
                 $receiveAmount   = round($escrowAmount * $lockedRate, 6);
@@ -222,6 +227,9 @@ class TransactionService
                         ]);
 
                         $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
+
+                        // Qualify referral on first transaction
+                        app(TierService::class)->qualifyReferral($sender);
 
                         // SMS to sender
                         OutboxEvent::create([

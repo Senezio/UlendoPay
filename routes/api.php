@@ -40,6 +40,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me',      [AuthController::class, 'me']);
 
+        // Transfer tiers
+        Route::get('/tier', [\App\Http\Controllers\Api\TierController::class, 'show']);
+        Route::get('/referral', [\App\Http\Controllers\Api\TierController::class, 'referral']);
+
         // Two-Factor Authentication
         Route::get('/auth/account-numbers', [AuthController::class, 'accountNumbers']);
         Route::get('/auth/2fa/setup',    [AuthController::class, 'twoFactorSetup']);
@@ -113,6 +117,9 @@ Route::prefix('v1')->group(function () {
             // Transactions
             Route::get('/transactions',                    [AdminController::class, 'transactions']);
             Route::get('/transactions/{reference}',        [AdminController::class, 'transactionShow']);
+            Route::post('/transactions/{reference}/retry',   [AdminController::class, 'retryTransaction']);
+            Route::get('/transactions/export',               [AdminController::class, 'exportTransactions']);
+            Route::get('/partners/health',                   [AdminController::class, 'partnerHealth']);
 
             // Exchange rates
             Route::get('/rates',                           [AdminController::class, 'rates']);
