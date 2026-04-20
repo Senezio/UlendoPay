@@ -33,6 +33,9 @@ Route::prefix('v1')->group(function () {
     // KYC document serve — secured via signed token
     Route::get('/kyc/document/{id}', [KycController::class, 'document'])->name('kyc.document');
 
+    // Fee calculator — public, no auth required
+    Route::get('/calculator', [\App\Http\Controllers\Api\CalculatorController::class, 'calculate']);
+
     // ── Authenticated routes ─────────────────────────────────────────────────
     Route::middleware('auth:sanctum')->group(function () {
 

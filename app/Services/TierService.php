@@ -193,8 +193,12 @@ class TierService
             ->orderBy('priority')
             ->first();
 
-        $feePercent = $corridor ? (float) $corridor->fee_percent : 1.5;
-        $feeFlat    = $corridor ? (float) $corridor->fee_flat : 0;
+        if (!$corridor) {
+            throw new \RuntimeException("No active corridor found for {$fromCurrency} to {$toCurrency}.");
+        }
+
+        $feePercent = (float) $corridor->fee_percent;
+        $feeFlat    = (float) $corridor->fee_flat;
         $feeAmount  = round($amount * ($feePercent / 100) + $feeFlat, 6);
 
         // Apply user discount if logged in
