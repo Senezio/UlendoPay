@@ -8,9 +8,11 @@
     "require": {
         "php": "^8.3",
         "africastalking/africastalking": "^3.0",
+        "barryvdh/laravel-dompdf": "^3.1",
         "laravel/framework": "^13.0",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0",
+        "maatwebsite/excel": "^3.1",
         "spomky-labs/otphp": "^11.4"
     },
     "require-dev": {

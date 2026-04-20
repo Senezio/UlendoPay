@@ -823,7 +823,7 @@ class AdminController extends Controller
         $account = \App\Models\Account::findOrFail($id);
 
         // Find a contra account — use system pool of same currency
-        $contraAccount = \App\Models\Account::where('type', 'system')
+        $contraAccount = \App\Models\Account::where('type', 'system')->where('id', '!=', $account->id)
             ->where('currency_code', $account->currency_code)
             ->first();
 
@@ -871,162 +871,38 @@ class AdminController extends Controller
      */
     public function exportTransactions(Request $request): \Symfony\Component\HttpFoundation\Response
     {
-        $data = $request->validate([
-            'format' => 'required|in:csv,xlsx,pdf',
-            'from'   => 'nullable|date',
-            'to'     => 'nullable|date',
-            'status' => 'nullable|string',
-        ]);
-
-        $query = \App\Models\Transaction::with(['sender:id,name,email', 'recipient:id,full_name,mobile_number'])
-            ->latest();
-
-        if (!empty($data['from']))   $query->whereDate('created_at', '>=', $data['from']);
-        if (!empty($data['to']))     $query->whereDate('created_at', '<=', $data['to']);
-        if (!empty($data['status'])) $query->where('status', $data['status']);
-
+        $query = \App\Models\Transaction::with(['sender', 'recipient'])->latest();
+        if ($request->filled('from')) $query->whereDate('created_at', '>=', $request->from);
+        if ($request->filled('to'))   $query->whereDate('created_at', '<=', $request->to);
+        
         $transactions = $query->get();
-
-        $rows = $transactions->map(fn($t) => [
-            'Reference'       => $t->reference_number,
-            'Date'            => $t->created_at->format('Y-m-d H:i'),
-            'Sender'          => $t->sender?->name,
-            'Sender Email'    => $t->sender?->email,
-            'Recipient'       => $t->recipient?->full_name,
-            'Recipient Phone' => $t->recipient?->mobile_number,
-            'Send Amount'     => $t->send_amount,
-            'Send Currency'   => $t->send_currency,
-            'Receive Amount'  => $t->receive_amount,
-            'Receive Currency'=> $t->receive_currency,
-            'Fee'             => $t->fee_amount,
-            'Rate'            => $t->locked_rate,
-            'Status'          => $t->status,
-        ]);
-
+        $format = $request->get('format', 'csv');
         $filename = 'transactions_' . now()->format('Ymd_His');
 
-        if ($data['format'] === 'csv') {
-            $csv = implode(',', array_keys($rows->first() ?? [])) . "\n";
-            foreach ($rows as $row) {
-                $csv .= implode(',', array_map(fn($v) => '"' . str_replace('"', '\"\\"\"', $v) . '"', $row)) . "\n";
+        if ($format === 'pdf') {
+            $html = '<h1>Transaction Report</h1><table border="1" width="100%" style="border-collapse: collapse;"><thead><tr><th>Ref</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead><tbody>';
+            foreach($transactions as $t) {
+                $html .= "<tr><td>{$t->reference_number}</td><td>{$t->created_at}</td><td>{$t->send_amount} {$t->send_currency}</td><td>{$t->status}</td></tr>";
             }
-            return response($csv, 200, [
-                'Content-Type'        => 'text/csv',
-                'Content-Disposition' => "attachment; filename=\"{$filename}.csv\"",
-            ]);
+            $html .= '</tbody></table>';
+            return \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->download($filename . '.pdf');
         }
 
-        if ($data['format'] === 'xlsx') {
-            // Simple XLSX via CSV with xlsx mime type — works in Excel
-            $csv = implode("\t", array_keys($rows->first() ?? [])) . "\n";
-            foreach ($rows as $row) {
-                $csv .= implode("\t", array_values($row)) . "\n";
+        if ($format === 'xlsx') {
+            return \Maatwebsite\Excel\Facades\Excel::download(new class($transactions) implements \Maatwebsite\Excel\Concerns\FromCollection, \Maatwebsite\Excel\Concerns\WithHeadings {
+                private $data; public function __construct($data){ $this->data = $data; }
+                public function collection(){ return $this->data->map(fn($t) => [$t->reference_number, $t->created_at, $t->sender?->name, $t->recipient?->full_name, $t->send_amount, $t->send_currency, $t->status]); }
+                public function headings(): array { return ['Reference', 'Date', 'Sender', 'Recipient', 'Amount', 'Currency', 'Status']; }
+            }, $filename . '.xlsx');
+        }
+
+        return response()->stream(function() use ($transactions) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, ['Reference', 'Date', 'Sender', 'Recipient', 'Amount', 'Currency', 'Status']);
+            foreach ($transactions as $t) {
+                fputcsv($file, [$t->reference_number, $t->created_at->format('Y-m-d H:i'), $t->sender?->name, $t->recipient?->full_name, $t->send_amount, $t->send_currency, $t->status]);
             }
-            return response($csv, 200, [
-                'Content-Type'        => 'application/vnd.ms-excel',
-                'Content-Disposition' => "attachment; filename=\"{$filename}.xls\"",
-            ]);
-        }
-
-        // PDF — simple HTML-to-text table
-        $html  = '<html><head><style>body{font-family:Arial,sans-serif;font-size:11px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:4px 6px;text-align:left;}th{background:#f3f4f6;}</style></head><body>';
-        $html .= '<h2 style="font-size:14px;">UlendoPay — Transaction Export (' . now()->format('d M Y') . ')</h2>';
-        $html .= '<table><thead><tr>';
-        foreach (array_keys($rows->first() ?? []) as $header) {
-            $html .= "<th>{$header}</th>";
-        }
-        $html .= '</tr></thead><tbody>';
-        foreach ($rows as $row) {
-            $html .= '<tr>';
-            foreach ($row as $val) $html .= "<td>{$val}</td>";
-            $html .= '</tr>';
-        }
-        $html .= '</tbody></table></body></html>';
-
-        return response($html, 200, [
-            'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => "attachment; filename=\"{$filename}.pdf\"",
-        ]);
+            fclose($file);
+        }, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => "attachment; filename=\"$filename.csv\""]);
     }
 
-    /**
-     * Retry disbursement for a failed/stuck transaction.
-     */
-    public function retryTransaction(Request $request, string $reference): \Illuminate\Http\JsonResponse
-    {
-        $transaction = \App\Models\Transaction::where('reference_number', $reference)
-            ->whereIn('status', ['failed', 'escrowed', 'processing', 'retrying'])
-            ->firstOrFail();
-
-        // Re-queue via outbox
-        \App\Models\OutboxEvent::create([
-            'event_type'     => 'disbursement_requested',
-            'transaction_id' => $transaction->id,
-            'payload'        => [
-                'transaction_id' => $transaction->id,
-                'manual_retry'   => true,
-                'retried_by'     => $request->user()->id,
-            ],
-            'status'          => 'pending',
-            'next_attempt_at' => now(),
-        ]);
-
-        $transaction->update(['status' => 'retrying']);
-
-        \App\Models\AuditLog::create([
-            'user_id'     => $request->user()->id,
-            'action'      => 'admin.transaction.retry',
-            'entity_type' => 'Transaction',
-            'entity_id'   => $transaction->id,
-            'new_values'  => ['reference' => $reference, 'manual_retry' => true],
-            'ip_address'  => $request->ip(),
-        ]);
-
-        return response()->json(['message' => 'Transaction queued for retry.', 'status' => 'retrying']);
-    }
-
-    /**
-     * Partner health stats — disbursement attempt breakdown.
-     */
-    public function partnerHealth(Request $request): \Illuminate\Http\JsonResponse
-    {
-        $stats = \App\Models\Partner::with(['corridors'])->get()->map(function ($partner) {
-            $attempts = \App\Models\DisbursementAttempt::where('partner_id', $partner->id);
-
-            $total    = (clone $attempts)->count();
-            $success  = (clone $attempts)->where('status', 'success')->count();
-            $failed   = (clone $attempts)->where('status', 'failed')->count();
-            $pending  = (clone $attempts)->where('status', 'pending')->count();
-            $avgMs    = (clone $attempts)->whereNotNull('response_time_ms')->avg('response_time_ms');
-
-            $recent = (clone $attempts)->with('transaction:id,reference_number,status')
-                ->latest('attempted_at')
-                ->limit(5)
-                ->get()
-                ->map(fn($a) => [
-                    'reference'       => $a->transaction?->reference_number,
-                    'status'          => $a->status,
-                    'response_time_ms'=> $a->response_time_ms,
-                    'failure_reason'  => $a->failure_reason,
-                    'attempted_at'    => $a->attempted_at,
-                ]);
-
-            return [
-                'id'            => $partner->id,
-                'name'          => $partner->name,
-                'code'          => $partner->code,
-                'is_active'     => $partner->is_active,
-                'total'         => $total,
-                'success'       => $success,
-                'failed'        => $failed,
-                'pending'       => $pending,
-                'success_rate'  => $total > 0 ? round(($success / $total) * 100, 1) : null,
-                'avg_ms'        => $avgMs ? round($avgMs) : null,
-                'recent'        => $recent,
-            ];
-        });
-
-        return response()->json(['partners' => $stats]);
-    }
-
-}
