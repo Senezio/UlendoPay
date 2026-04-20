@@ -385,123 +385,21 @@ class TransactionService
 
                     $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
 
-                    // Credit recipient wallet or hold in escrow if unregistered
-                    $recipientPhoneHash = hash('sha256', $recipient->mobile_number);
-                    $recipientUser      = User::where('phone_hash', $recipientPhoneHash)->first();
+                    // Queue disbursement via outbox — all transfers go through PawaPay
+                    // regardless of whether the recipient is a registered UlendoPay user.
+                    OutboxEvent::create([
+                        'event_type'     => 'disbursement_requested',
+                        'transaction_id' => $transaction->id,
+                        'payload'        => [
+                            'transaction_id' => $transaction->id,
+                            'reference'      => $reference,
+                        ],
+                        'status'          => 'pending',
+                        'next_attempt_at' => Carbon::now(),
+                        'max_attempts'    => 5,
+                    ]);
 
-                    if ($recipientUser) {
-                        $recipientAccount = Account::where('owner_id', $recipientUser->id)
-                            ->where('owner_type', User::class)
-                            ->where('type', 'user_wallet')
-                            ->where('currency_code', $receiveCurrency)
-                            ->first();
-
-                        if ($recipientAccount) {
-                            // Debit the receive-currency POOL (not escrow) —
-                            // the send-side MWK escrow already holds the funds.
-                            // ZMW escrow was never funded so debiting it causes negative balance.
-                            $receivePoolAccount = Account::where('type', 'system')
-                                ->where('code', "{$receiveCurrency}-POOL")
-                                ->firstOrFail();
-
-                            // Release MWK escrow now that recipient is credited
-                            $escrowReleaseAmount = $sendAmount - $feeAmount - $guaranteeAmount;
-                            $escrowAcct = Account::where('type', 'escrow')
-                                ->where('currency_code', $sendCurrency)->firstOrFail();
-                            $sendPoolAcct = Account::where('type', 'system')
-                                ->where('code', "{$sendCurrency}-POOL")->firstOrFail();
-
-                            $this->ledger->post(
-                                reference:   "TXN-{$reference}-ESCROW-RELEASE",
-                                type:        'transfer_completion',
-                                currency:    $sendCurrency,
-                                entries: [
-                                    [
-                                        'account_id'  => $escrowAcct->id,
-                                        'type'        => 'debit',
-                                        'amount'      => $escrowReleaseAmount,
-                                        'description' => "Escrow release for internal transfer: {$reference}",
-                                    ],
-                                    [
-                                        'account_id'  => $sendPoolAcct->id,
-                                        'type'        => 'credit',
-                                        'amount'      => $escrowReleaseAmount,
-                                        'description' => "Pool settlement for internal transfer: {$reference}",
-                                    ],
-                                ],
-                                description: "Escrow release for internal cross-currency transfer: {$reference}"
-                            );
-
-                            $this->ledger->post(
-                                reference:   "TXN-{$reference}-CREDIT",
-                                type:        'transfer_credit',
-                                currency:    $receiveCurrency,
-                                entries: [
-                                    [
-                                        'account_id'  => $receivePoolAccount->id,
-                                        'type'        => 'debit',
-                                        'amount'      => $receiveAmount,
-                                        'description' => "Disbursement release: {$reference}",
-                                    ],
-                                    [
-                                        'account_id'  => $recipientAccount->id,
-                                        'type'        => 'credit',
-                                        'amount'      => $receiveAmount,
-                                        'description' => "Transfer received: {$reference}",
-                                    ],
-                                ],
-                                description: "Wallet credit for cross-currency transfer: {$reference}"
-                            );
-
-                            OutboxEvent::create([
-                                'event_type'     => 'sms_notification',
-                                'transaction_id' => $transaction->id,
-                                'payload'        => [
-                                    'type'      => 'transfer_received',
-                                    'phone'     => $recipientUser->phone,
-                                    'amount'    => $receiveAmount,
-                                    'currency'  => $receiveCurrency,
-                                    'reference' => $reference,
-                                ],
-                                'status'          => 'pending',
-                                'next_attempt_at' => Carbon::now(),
-                            ]);
-
-                            $transaction->update([
-                                'status'       => 'completed',
-                                'completed_at' => now(),
-                            ]);
-                        } else {
-                            $maskedPhone = substr($recipient->mobile_number, 0, 4)
-                                . str_repeat('*', max(0, strlen($recipient->mobile_number) - 7))
-                                . substr($recipient->mobile_number, -3);
-
-                            PendingClaim::create([
-                                'transaction_id'         => $transaction->id,
-                                'recipient_phone_hash'   => $recipientPhoneHash,
-                                'recipient_phone_masked' => $maskedPhone,
-                                'amount'                 => $receiveAmount,
-                                'currency_code'          => $receiveCurrency,
-                                'status'                 => 'pending',
-                                'expires_at'             => Carbon::now()->addHours(48),
-                            ]);
-                        }
-                    } else {
-                        $maskedPhone = substr($recipient->mobile_number, 0, 4)
-                            . str_repeat('*', max(0, strlen($recipient->mobile_number) - 7))
-                            . substr($recipient->mobile_number, -3);
-
-                        PendingClaim::create([
-                            'transaction_id'         => $transaction->id,
-                            'recipient_phone_hash'   => $recipientPhoneHash,
-                            'recipient_phone_masked' => $maskedPhone,
-                            'amount'                 => $receiveAmount,
-                            'currency_code'          => $receiveCurrency,
-                            'status'                 => 'pending',
-                            'expires_at'             => Carbon::now()->addHours(48),
-                        ]);
-                    }
-
+                    // SMS to sender confirming initiation
                     OutboxEvent::create([
                         'event_type'     => 'sms_notification',
                         'transaction_id' => $transaction->id,

@@ -960,7 +960,7 @@ class AdminController extends Controller
 
         // Re-queue via outbox
         \App\Models\OutboxEvent::create([
-            'event_type'     => 'disbursement',
+            'event_type'     => 'disbursement_requested',
             'transaction_id' => $transaction->id,
             'payload'        => [
                 'transaction_id' => $transaction->id,

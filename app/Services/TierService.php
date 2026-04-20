@@ -225,7 +225,7 @@ class TierService
             'exchange_rate'    => (float) $rate->rate,
             'receive_amount'   => $receiveAmount,
             'discount_percent' => $discountPercent,
-            'rate_source'      => $rate->source ?? 'central_bank',
+
         ];
     }
 }

@@ -221,8 +221,8 @@ class ProcessOutboxEvents extends Command
         $phoneHash     = hash('sha256', $transaction->recipient->mobile_number);
         $recipientUser = User::where('phone_hash', $phoneHash)->first();
 
-        $escrowAccount = Account::where('type', 'escrow')
-            ->where('currency_code', $receiveCurrency)
+        $poolAccount = Account::where('type', 'system')
+            ->where('code', "{$receiveCurrency}-POOL")
             ->firstOrFail();
 
         if ($recipientUser) {
@@ -250,7 +250,7 @@ class ProcessOutboxEvents extends Command
                     currency:    $receiveCurrency,
                     entries: [
                         [
-                            'account_id'  => $escrowAccount->id,
+                            'account_id'  => $poolAccount->id,
                             'type'        => 'debit',
                             'amount'      => $receiveAmount,
                             'description' => "Disbursement release: {$reference}",
