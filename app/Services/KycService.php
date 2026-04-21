@@ -18,7 +18,7 @@ class KycService
         'application/pdf',
     ];
 
-    private int $maxFileSizeKb = 15360; // 5MB
+    private int $maxFileSizeKb = 15360; // 15MB
 
     /**
      * Submit a KYC document for review.
@@ -36,21 +36,24 @@ class KycService
         // Validate file
         $this->validateFile($file);
 
-        // Check for existing pending/approved KYC
+        // Check for existing pending or approved KYC
         $existing = KycRecord::where('user_id', $user->id)
             ->whereIn('status', ['pending', 'approved'])
             ->first();
 
-        if (?->status === approved) {
-             = [unverified => 0, basic => 1, verified => 2];
-               = [->tier] ?? 0;
-             = [ ?? verified] ?? 0;
-            if ( <= ) {
+        if ($existing?->status === 'approved') {
+            $tierRank      = ['unverified' => 0, 'basic' => 1, 'verified' => 2];
+            $currentRank   = $tierRank[$user->tier] ?? 0;
+            $requestedRank = $tierRank[$requestedTier ?? 'verified'] ?? 0;
+            
+            if ($requestedRank <= $currentRank) {
                 throw new \RuntimeException(
-                    "Your KYC is already approved at {->tier} tier. Submit documents for a higher tier to upgrade."
+                    "Your KYC is already approved at {$user->tier} tier. Submit documents for a higher tier to upgrade."
                 );
             }
         }
+
+        if ($existing?->status === 'pending') {
             throw new \RuntimeException(
                 'You already have a KYC submission under review. Please wait for the outcome.'
             );
@@ -86,7 +89,7 @@ class KycService
 
     /**
      * Approve a KYC submission.
-     * Updates user kyc_status to verified.
+     * Updates user kyc_status and tier.
      */
     public function approve(KycRecord $record, User $reviewer): KycRecord
     {
@@ -178,7 +181,6 @@ class KycService
 
     /**
      * Generate a temporary signed URL for viewing a KYC document.
-     * Never expose the raw file path.
      */
     public function getSecureUrl(KycRecord $record): string
     {
@@ -188,11 +190,9 @@ class KycService
             );
         }
 
-        // Return a temporary URL valid for 5 minutes
-        // For local disk this returns a signed route URL
         return route('kyc.document', [
-            'id' => $record->id,
-            'token'  => encrypt([
+            'id'    => $record->id,
+            'token' => encrypt([
                 'record_id'  => $record->id,
                 'expires_at' => now()->addMinutes(5)->timestamp,
             ]),
@@ -200,8 +200,7 @@ class KycService
     }
 
     /**
-     * Store file securely with a non-guessable path.
-     * Path format: {user_id}/{year}/{month}/{uuid}.{ext}
+     * Store file securely with a safe path.
      */
     private function storeFile(
         User         $user,
