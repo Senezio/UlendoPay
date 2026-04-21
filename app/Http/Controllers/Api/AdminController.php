@@ -74,7 +74,7 @@ class AdminController extends Controller
 
     public function kycQueue(Request $request): JsonResponse
     {
-        $records = KycRecord::with('user:id,name,email,phone_encrypted,phone_hash,country_code,created_at')
+        $records = KycRecord::with('user:id,name,email,phone_encrypted,phone_hash,country_code,tier,kyc_status,created_at')
             ->where('status', 'pending')
             ->latest()
             ->paginate(20);
@@ -103,6 +103,7 @@ class AdminController extends Controller
                 'phone'        => $record->user->phone,
                 'country_code' => $record->user->country_code,
                 'kyc_status'   => $record->user->kyc_status,
+                tier         => ->user->tier,
                 'created_at'   => $record->user->created_at,
             ],
         ]);
@@ -412,6 +413,103 @@ class AdminController extends Controller
         return response()->json(['message' => 'Fraud confirmed. User suspended.']);
     }
 
+    // ── Tier Management ──────────────────────────────────────────────────────
+
+    public function tierList(): JsonResponse
+    {
+        $tiers = \App\Models\TransferTier::orderBy('id')->get();
+        return response()->json(['tiers' => $tiers]);
+    }
+
+    public function tierCreate(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name'                  => 'required|string|unique:transfer_tiers,name',
+            'label'                 => 'required|string',
+            'daily_limit'           => 'required|numeric|min:0',
+            'monthly_limit'         => 'required|numeric|min:0',
+            'per_transaction_limit' => 'required|numeric|min:0',
+            'fee_discount_percent'  => 'required|numeric|min:0|max:100',
+        ]);
+
+        $tier = \App\Models\TransferTier::create($data);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'admin.tier.created',
+            'entity_type' => 'TransferTier',
+            'entity_id'   => $tier->id,
+            'new_values'  => $data,
+            'ip_address'  => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Tier created successfully.', 'tier' => $tier], 201);
+    }
+
+    public function tierUpdate(Request $request, int $id): JsonResponse
+    {
+        $tier = \App\Models\TransferTier::findOrFail($id);
+
+        $data = $request->validate([
+            'label'                 => 'sometimes|string',
+            'daily_limit'           => 'sometimes|numeric|min:0',
+            'monthly_limit'         => 'sometimes|numeric|min:0',
+            'per_transaction_limit' => 'sometimes|numeric|min:0',
+            'fee_discount_percent'  => 'sometimes|numeric|min:0|max:100',
+            'is_active'             => 'sometimes|boolean',
+        ]);
+
+        $tier->update($data);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'admin.tier.updated',
+            'entity_type' => 'TransferTier',
+            'entity_id'   => $tier->id,
+            'new_values'  => $data,
+            'ip_address'  => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Tier updated successfully.', 'tier' => $tier]);
+    }
+
+    public function userUpgradeTier(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'tier'   => 'required|in:unverified,basic,verified',
+            'reason' => 'nullable|string',
+        ]);
+
+        $user = \App\Models\User::findOrFail($id);
+        $oldTier = $user->tier;
+
+        // Validate upgrade direction
+        $tierOrder = ['unverified' => 1, 'basic' => 2, 'verified' => 3];
+        if (($tierOrder[$data['tier']] ?? 0) <= ($tierOrder[$oldTier] ?? 0)) {
+            return response()->json(['message' => 'Can only upgrade to a higher tier.'], 422);
+        }
+
+        $user->update(['tier' => $data['tier']]);
+
+        // If upgrading to verified, also update kyc_status
+        if ($data['tier'] === 'verified') {
+            $user->update(['kyc_status' => 'verified']);
+        } elseif ($data['tier'] === 'basic') {
+            $user->update(['kyc_status' => 'pending']);
+        }
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'admin.user.tier_upgraded',
+            'entity_type' => 'User',
+            'entity_id'   => $user->id,
+            'new_values'  => ['from' => $oldTier, 'to' => $data['tier'], 'reason' => $data['reason'] ?? null],
+            'ip_address'  => $request->ip(),
+        ]);
+
+        return response()->json(['message' => "User upgraded to {$data['tier']} tier successfully."]);
+    }
+
     // ── Staff Management (super_admin only) ───────────────────────────────
 
     public function staffList(): JsonResponse
@@ -561,7 +659,7 @@ class AdminController extends Controller
             "inactive" => $accounts->where("is_active", false)->count(),
             "escrow"   => round($accounts->where("type", "escrow")->sum("balance"), 2),
             "fee"      => round($accounts->where("type", "fee")->sum("balance"), 2),
-            "guarantee"=> round($accounts->where("type", "guarantee")->sum("balance"), 2),
+               "guarantee"=> round($accounts->where("type", "guarantee")->sum("balance"), 2),
             "system"   => round($accounts->where("type", "system")->sum("balance"), 2),
         ];
 
@@ -822,15 +920,15 @@ class AdminController extends Controller
 
         $account = \App\Models\Account::findOrFail($id);
 
-        // Find a contra account — use system pool of same currency
-        $contraAccount = \App\Models\Account::where('type', 'system')->where('id', '!=', $account->id)
-            ->where('currency_code', $account->currency_code)
+        // Find equity contra account for this currency
+        $contraAccount = \App\Models\Account::where("type", "system")
+            ->where("currency_code", $account->currency_code)
+            ->where("code", "like", "%-EQUITY")
             ->first();
 
         if (!$contraAccount) {
-            return response()->json(['message' => 'No system pool account found for this currency.'], 422);
+            return response()->json(["message" => "No equity account found for this currency."], 422);
         }
-
         $contraType = $data['type'] === 'debit' ? 'credit' : 'debit';
 
         app(\App\Services\LedgerService::class)->post(
@@ -871,38 +969,261 @@ class AdminController extends Controller
      */
     public function exportTransactions(Request $request): \Symfony\Component\HttpFoundation\Response
     {
-        $query = \App\Models\Transaction::with(['sender', 'recipient'])->latest();
-        if ($request->filled('from')) $query->whereDate('created_at', '>=', $request->from);
-        if ($request->filled('to'))   $query->whereDate('created_at', '<=', $request->to);
-        
+        $data = $request->validate([
+            'format' => 'required|in:csv,xlsx,pdf',
+            'from'   => 'nullable|date',
+            'to'     => 'nullable|date',
+            'status' => 'nullable|string',
+        ]);
+
+        $query = \App\Models\Transaction::with(['sender:id,name,email', 'recipient:id,full_name,mobile_number'])
+            ->latest();
+
+        if (!empty($data['from']))   $query->whereDate('created_at', '>=', $data['from']);
+        if (!empty($data['to']))     $query->whereDate('created_at', '<=', $data['to']);
+        if (!empty($data['status'])) $query->where('status', $data['status']);
+
         $transactions = $query->get();
-        $format = $request->get('format', 'csv');
+
+        $rows = $transactions->map(fn($t) => [
+            'Reference'       => $t->reference_number,
+            'Date'            => $t->created_at->format('Y-m-d H:i'),
+            'Sender'          => $t->sender?->name,
+            'Sender Email'    => $t->sender?->email,
+            'Recipient'       => $t->recipient?->full_name,
+            'Recipient Phone' => $t->recipient?->mobile_number,
+            'Send Amount'     => $t->send_amount,
+            'Send Currency'   => $t->send_currency,
+            'Receive Amount'  => $t->receive_amount,
+            'Receive Currency'=> $t->receive_currency,
+            'Fee'             => $t->fee_amount,
+            'Rate'            => $t->locked_rate,
+            'Status'          => $t->status,
+        ]);
+
         $filename = 'transactions_' . now()->format('Ymd_His');
 
-        if ($format === 'pdf') {
-            $html = '<h1>Transaction Report</h1><table border="1" width="100%" style="border-collapse: collapse;"><thead><tr><th>Ref</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead><tbody>';
-            foreach($transactions as $t) {
-                $html .= "<tr><td>{$t->reference_number}</td><td>{$t->created_at}</td><td>{$t->send_amount} {$t->send_currency}</td><td>{$t->status}</td></tr>";
+        if ($data['format'] === 'csv') {
+            $handle = fopen('php://temp', 'r+');
+            fputcsv($handle, array_keys($rows->first() ?? []));
+            foreach ($rows as $row) {
+                fputcsv($handle, array_values($row));
             }
-            $html .= '</tbody></table>';
-            return \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->download($filename . '.pdf');
+            rewind($handle);
+            $csv = stream_get_contents($handle);
+            fclose($handle);
+            return response($csv, 200, [
+                'Content-Type'        => 'text/csv',
+                'Content-Disposition' => "attachment; filename=\"{$filename}.csv\"",
+            ]);
         }
 
-        if ($format === 'xlsx') {
-            return \Maatwebsite\Excel\Facades\Excel::download(new class($transactions) implements \Maatwebsite\Excel\Concerns\FromCollection, \Maatwebsite\Excel\Concerns\WithHeadings {
-                private $data; public function __construct($data){ $this->data = $data; }
-                public function collection(){ return $this->data->map(fn($t) => [$t->reference_number, $t->created_at, $t->sender?->name, $t->recipient?->full_name, $t->send_amount, $t->send_currency, $t->status]); }
-                public function headings(): array { return ['Reference', 'Date', 'Sender', 'Recipient', 'Amount', 'Currency', 'Status']; }
-            }, $filename . '.xlsx');
+        if ($data['format'] === 'xlsx') {
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+
+            // Headers
+            $headers = array_keys($rows->first() ?? []);
+            foreach ($headers as $col => $header) {
+                $sheet->setCellValueByColumnAndRow($col + 1, 1, $header);
+                $sheet->getStyleByColumnAndRow($col + 1, 1)->getFont()->setBold(true);
+            }
+
+            // Data rows
+            foreach ($rows as $rowIndex => $row) {
+                foreach (array_values($row) as $col => $value) {
+                    $sheet->setCellValueByColumnAndRow($col + 1, $rowIndex + 2, $value);
+                }
+            }
+
+            // Auto-size columns
+            foreach (range(1, count($headers)) as $col) {
+                $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+            }
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+
+            $tmpFile = tempnam(sys_get_temp_dir(), 'ulendo_') . '.xlsx';
+            $writer->save($tmpFile);
+            $binary = file_get_contents($tmpFile);
+            unlink($tmpFile);
+
+            return response($binary, 200, [
+                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => "attachment; filename=\"{$filename}.xlsx\"",
+                'Content-Length'      => strlen($binary),
+                'Cache-Control'       => 'no-cache, no-store',
+            ]);
         }
 
-        return response()->stream(function() use ($transactions) {
-            $file = fopen('php://output', 'w');
-            fputcsv($file, ['Reference', 'Date', 'Sender', 'Recipient', 'Amount', 'Currency', 'Status']);
-            foreach ($transactions as $t) {
-                fputcsv($file, [$t->reference_number, $t->created_at->format('Y-m-d H:i'), $t->sender?->name, $t->recipient?->full_name, $t->send_amount, $t->send_currency, $t->status]);
+        // PDF using DomPDF — Professional Template
+        $adminName   = $request->user()?->name ?? 'Administrator';
+        $logoPath    = public_path('logo.png');
+        $logoData    = file_exists($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
+        $logoImg     = $logoData ? '<img src="data:image/png;base64,' . $logoData . '" style="height:48px;width:auto;" />' : '<strong style="font-size:18px;color:#e85d04;">UlendoPay</strong>';
+
+        $totalRows = $rows->count();
+
+        $html  = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+        $html .= '<style>';
+        $html .= '* { box-sizing: border-box; margin: 0; padding: 0; }';
+        $html .= 'body { font-family: Arial, sans-serif; font-size: 8.5px; color: #1a1a1a; background: #fff; }';
+        $html .= '.header { display: table; width: 100%; border-bottom: 3px solid #e85d04; padding-bottom: 12px; margin-bottom: 12px; }';
+        $html .= '.header-left { display: table-cell; vertical-align: middle; width: 50%; }';
+        $html .= '.header-right { display: table-cell; vertical-align: middle; width: 50%; text-align: right; font-size: 7.5px; color: #555; line-height: 1.6; }';
+        $html .= '.report-title { font-size: 15px; font-weight: bold; color: #1a1a1a; margin-top: 6px; }';
+        $html .= '.report-subtitle { font-size: 8px; color: #888; margin-top: 2px; }';
+
+        $html .= 'table.data { width: 100%; border-collapse: collapse; margin-top: 4px; }';
+        $html .= 'table.data thead tr { background: #e85d04; color: #fff; }';
+        $html .= 'table.data th { padding: 5px 6px; text-align: left; font-size: 7.5px; font-weight: bold; letter-spacing: 0.03em; border: none; }';
+        $html .= 'table.data td { padding: 4px 6px; font-size: 7.5px; border-bottom: 1px solid #f0f0f0; color: #333; }';
+        $html .= 'table.data tbody tr:nth-child(even) td { background: #fff7f0; }';
+        $html .= 'table.data tbody tr:nth-child(odd) td { background: #ffffff; }';
+        $html .= '.status-completed { color: #16a34a; font-weight: bold; }';
+        $html .= '.status-failed { color: #dc2626; font-weight: bold; }';
+        $html .= '.status-processing, .status-retrying, .status-escrowed { color: #d97706; font-weight: bold; }';
+        $html .= '.status-refunded { color: #6b7280; font-weight: bold; }';
+        $html .= '.footer { margin-top: 14px; border-top: 1px solid #e5e5e5; padding-top: 8px; display: table; width: 100%; }';
+        $html .= '.footer-left { display: table-cell; font-size: 7px; color: #aaa; }';
+        $html .= '.footer-right { display: table-cell; text-align: right; font-size: 7px; color: #aaa; }';
+        $html .= '.summary { display: table; width: 100%; margin-bottom: 10px; }';
+        $html .= '.summary-box { display: table-cell; width: 25%; text-align: center; padding: 6px; border: 1px solid #f0f0f0; border-radius: 4px; }';
+        $html .= '.summary-box .num { font-size: 14px; font-weight: bold; color: #e85d04; }';
+        $html .= '.summary-box .lbl { font-size: 7px; color: #888; margin-top: 2px; }';
+        $html .= '</style></head><body>';
+
+        // Header
+        $html .= '<div class="header">';
+        $html .= '<div class="header-left">' . $logoImg . '<div class="report-title">Transaction Export Report</div><div class="report-subtitle">Ulendo Technologies Limited</div></div>';
+        $html .= '<div class="header-right">';
+        $html .= 'Ulendo Technologies Limited<br>';
+        $html .= 'P.O. Box 3245, Lilongwe 3, Malawi<br>';
+        $html .= 'support@ulendopay.com<br>';
+        $html .= 'www.ulendopay.com';
+        $html .= '</div></div>';
+
+        // Generated by line under header
+        $html .= '<div style="font-size:7.5px;color:#888;margin-bottom:10px;">Generated by <strong>' . htmlspecialchars($adminName) . '</strong> &nbsp;|&nbsp; ' . now()->format('d M Y, H:i') . '</div>';
+
+        // Summary boxes
+        $completed = $rows->where('Status', 'completed')->count();
+        $failed    = $rows->where('Status', 'failed')->count();
+        $html .= '<div class="summary">';
+        $html .= '<div class="summary-box"><div class="num">' . $totalRows . '</div><div class="lbl">Total Transactions</div></div>';
+        $html .= '<div class="summary-box"><div class="num" style="color:#16a34a;">' . $completed . '</div><div class="lbl">Completed</div></div>';
+        $html .= '<div class="summary-box"><div class="num" style="color:#dc2626;">' . $failed . '</div><div class="lbl">Failed</div></div>';
+        $html .= '<div class="summary-box"><div class="num" style="color:#6b7280;">' . ($totalRows - $completed - $failed) . '</div><div class="lbl">Other</div></div>';
+        $html .= '</div>';
+
+        // Table
+        $html .= '<table class="data"><thead><tr>';
+        foreach (array_keys($rows->first() ?? []) as $header) {
+            $html .= '<th>' . htmlspecialchars($header) . '</th>';
+        }
+        $html .= '</tr></thead><tbody>';
+        foreach ($rows as $row) {
+            $html .= '<tr>';
+            foreach ($row as $key => $val) {
+                $class = $key === 'Status' ? 'status-' . strtolower((string)$val) : '';
+                $html .= '<td class="' . $class . '">' . htmlspecialchars((string)$val) . '</td>';
             }
-            fclose($file);
-        }, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => "attachment; filename=\"$filename.csv\""]);
+            $html .= '</tr>';
+        }
+        $html .= '</tbody></table>';
+
+        // Footer
+        $html .= '<div class="footer">';
+        $html .= '<div class="footer-left">CONFIDENTIAL — For internal use only. Generated by UlendoPay Admin System.</div>';
+        $html .= '<div class="footer-right">© ' . now()->year . ' Ulendo Technologies Limited. All rights reserved.</div>';
+        $html .= '</div>';
+
+        $html .= '</body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)
+            ->setPaper('a4', 'landscape');
+
+        return $pdf->download($filename . '.pdf');
     }
 
+    /**
+     * Retry disbursement for a failed/stuck transaction.
+     */
+    public function retryTransaction(Request $request, string $reference): \Illuminate\Http\JsonResponse
+    {
+        $transaction = \App\Models\Transaction::where('reference_number', $reference)
+            ->whereIn('status', ['failed', 'escrowed', 'processing', 'retrying'])
+            ->firstOrFail();
+
+        // Re-queue via outbox
+        \App\Models\OutboxEvent::create([
+            'event_type'     => 'disbursement_requested',
+            'transaction_id' => $transaction->id,
+            'payload'        => [
+                'transaction_id' => $transaction->id,
+                'manual_retry'   => true,
+                'retried_by'     => $request->user()->id,
+            ],
+            'status'          => 'pending',
+            'next_attempt_at' => now(),
+        ]);
+
+        $transaction->update(['status' => 'retrying']);
+
+        \App\Models\AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'admin.transaction.retry',
+            'entity_type' => 'Transaction',
+            'entity_id'   => $transaction->id,
+            'new_values'  => ['reference' => $reference, 'manual_retry' => true],
+            'ip_address'  => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Transaction queued for retry.', 'status' => 'retrying']);
+    }
+
+    /**
+     * Partner health stats — disbursement attempt breakdown.
+     */
+    public function partnerHealth(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $stats = \App\Models\Partner::with(['corridors'])->get()->map(function ($partner) {
+            $attempts = \App\Models\DisbursementAttempt::where('partner_id', $partner->id);
+
+            $total    = (clone $attempts)->count();
+            $success  = (clone $attempts)->where('status', 'success')->count();
+            $failed   = (clone $attempts)->where('status', 'failed')->count();
+            $pending  = (clone $attempts)->where('status', 'pending')->count();
+            $avgMs    = (clone $attempts)->whereNotNull('response_time_ms')->avg('response_time_ms');
+
+            $recent = (clone $attempts)->with('transaction:id,reference_number,status')
+                ->latest('attempted_at')
+                ->limit(5)
+                ->get()
+                ->map(fn($a) => [
+                    'reference'       => $a->transaction?->reference_number,
+                    'status'          => $a->status,
+                    'response_time_ms'=> $a->response_time_ms,
+                    'failure_reason'  => $a->failure_reason,
+                    'attempted_at'    => $a->attempted_at,
+                ]);
+
+            return [
+                'id'            => $partner->id,
+                'name'          => $partner->name,
+                'code'          => $partner->code,
+                'is_active'     => $partner->is_active,
+                'total'         => $total,
+                'success'       => $success,
+                'failed'        => $failed,
+                'pending'       => $pending,
+                'success_rate'  => $total > 0 ? round(($success / $total) * 100, 1) : null,
+                'avg_ms'        => $avgMs ? round($avgMs) : null,
+                'recent'        => $recent,
+            ];
+        });
+
+        return response()->json(['partners' => $stats]);
+    }
+
+}

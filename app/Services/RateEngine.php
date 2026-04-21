@@ -109,13 +109,11 @@ class RateEngine
 
         if ($fromCurrency === $toCurrency) { return ExchangeRate::updateOrCreate(["from_currency" => $fromCurrency, "to_currency" => $toCurrency], ["rate" => 1.0, "inverse_rate" => 1.0, "source" => "SYSTEM", "is_active" => true, "fetched_at" => now(), "expires_at" => now()->addYears(10)]); }
 
-        return Cache::remember($cacheKey, now()->addHours(1), function () use ($fromCurrency, $toCurrency) {
-            return ExchangeRate::where('from_currency', $fromCurrency)
+        return ExchangeRate::where('from_currency', $fromCurrency)
                 ->where('to_currency', $toCurrency)
                 ->active()
                 ->latest('fetched_at')
                 ->first();
-        });
     }
 
     /**

@@ -6,7 +6,7 @@ class TransferTier extends Model
 {
     protected $fillable = [
         'name', 'label', 'daily_limit', 'monthly_limit',
-        'per_transaction_limit', 'fee_discount_percent', 'is_active'
+        'per_transaction_limit', 'fee_discount_percent', 'limit_currency', 'is_active'
     ];
 
     protected $casts = [

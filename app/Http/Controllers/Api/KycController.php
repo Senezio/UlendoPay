@@ -31,9 +31,10 @@ class KycController extends Controller
     public function submit(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'document_type'   => 'required|in:passport,national_id,drivers_license,utility_bill',
+            'document_type'   => 'required|in:passport,national_id,drivers_license,utility_bill,voters_card,bank_statement',
             'document_number' => 'nullable|string|max:50',
             'document'        => 'required|file|mimes:jpeg,png,webp,pdf|max:15360',
+            'requested_tier'  => 'nullable|in:basic,verified',
         ]);
 
         try {
@@ -43,6 +44,7 @@ class KycController extends Controller
                 documentNumber: $data['document_number'] ?? null,
                 file:           $request->file('document'),
                 ipAddress:      $request->ip(),
+                requestedTier:  $data['requested_tier'] ?? null,
             );
 
             return response()->json([
@@ -106,6 +108,7 @@ class KycController extends Controller
             'rejection_reason'=> $record->rejection_reason,
             'submitted_at'    => $record->created_at,
             'reviewed_at'     => $record->reviewed_at,
+            requested_tier  => ->requested_tier,
         ];
     }
 }

@@ -29,7 +29,8 @@ class KycService
         string       $documentType,
         ?string      $documentNumber,
         UploadedFile $file,
-        string       $ipAddress = ''
+        string       $ipAddress = '',
+        ?string      $requestedTier = null
     ): KycRecord {
 
         // Validate file
@@ -40,13 +41,16 @@ class KycService
             ->whereIn('status', ['pending', 'approved'])
             ->first();
 
-        if ($existing?->status === 'approved') {
-            throw new \RuntimeException(
-                'Your KYC is already approved. No further submission needed.'
-            );
+        if (?->status === approved) {
+             = [unverified => 0, basic => 1, verified => 2];
+               = [->tier] ?? 0;
+             = [ ?? verified] ?? 0;
+            if ( <= ) {
+                throw new \RuntimeException(
+                    "Your KYC is already approved at {->tier} tier. Submit documents for a higher tier to upgrade."
+                );
+            }
         }
-
-        if ($existing?->status === 'pending') {
             throw new \RuntimeException(
                 'You already have a KYC submission under review. Please wait for the outcome.'
             );
@@ -62,6 +66,7 @@ class KycService
             'document_number' => $documentNumber,
             'file_path'       => $path,
             'status'          => 'pending',
+            'requested_tier'  => $requestedTier,
         ]);
 
         AuditLog::create([
@@ -97,10 +102,11 @@ class KycService
             'reviewed_at' => now(),
         ]);
 
-        $record->user->update(['kyc_status' => 'verified']);
+        $requestedTier = $record->requested_tier ?? 'verified';
+        $record->user->update(['kyc_status' => 'verified', 'tier' => $requestedTier]);
 
-        // Upgrade user tier
-        app(\App\Services\TierService::class)->syncTier($record->user->fresh());
+        // Sync tier based on requested tier
+        app(\App\Services\TierService::class)->syncTier($record->user->fresh(), $requestedTier);
 
         // Notify user via SMS
         app(SmsService::class)->send([

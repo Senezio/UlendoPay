@@ -78,13 +78,12 @@ class ReconciliationService
             ? $totalDebits - $totalCredits
             : $totalCredits - $totalDebits;
 
-        // Expected balance = previous snapshot, or 0 if first ever
-        $previous = ReconciliationSnapshot::where('account_id', $account->id)
-            ->where('snapshot_date', '<', $date)
-            ->orderByDesc('snapshot_date')
+        // Expected balance = running balance from account_balances table
+        $accountBalance = DB::table('account_balances')
+            ->where('account_id', $account->id)
             ->first();
 
-        $expectedBalance = $previous ? (float) $previous->computed_balance : 0.0;
+        $expectedBalance = $accountBalance ? (float) $accountBalance->balance : 0.0;
 
         $variance = round($computedBalance - $expectedBalance, 6);
         $status   = abs($variance) < 0.000001 ? 'matched' : 'mismatch';

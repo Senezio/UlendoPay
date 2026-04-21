@@ -118,10 +118,10 @@ Route::prefix('v1')->group(function () {
                 ->middleware('admin:super_admin');
 
             // Transactions
-            Route::get('/transactions',                    [AdminController::class, 'transactions']);
-            Route::get('/transactions/{reference}',        [AdminController::class, 'transactionShow']);
-            Route::post('/transactions/{reference}/retry',   [AdminController::class, 'retryTransaction']);
+            Route::get('/transactions',                      [AdminController::class, 'transactions']);
             Route::get('/transactions/export',               [AdminController::class, 'exportTransactions']);
+            Route::get('/transactions/{reference}',          [AdminController::class, 'transactionShow']);
+            Route::post('/transactions/{reference}/retry',   [AdminController::class, 'retryTransaction']);
             Route::get('/partners/health',                   [AdminController::class, 'partnerHealth']);
 
             // Exchange rates
@@ -154,6 +154,15 @@ Route::prefix('v1')->group(function () {
                 ->middleware('admin:super_admin,finance_officer');
             Route::post('/fraud-alerts/{id}/confirm',      [AdminController::class, 'fraudAlertConfirm'])
                 ->middleware('admin:super_admin,finance_officer');
+
+            // Tier management
+            Route::get('/tiers',                           [AdminController::class, 'tierList']);
+            Route::post('/tiers',                          [AdminController::class, 'tierCreate'])
+                ->middleware('admin:super_admin');
+            Route::put('/tiers/{id}',                      [AdminController::class, 'tierUpdate'])
+                ->middleware('admin:super_admin');
+            Route::post('/users/{id}/upgrade-tier',        [AdminController::class, 'userUpgradeTier'])
+                ->middleware('admin:super_admin,kyc_reviewer');
 
             // Staff management — super_admin only
             Route::get('/staff',                           [AdminController::class, 'staffList'])
