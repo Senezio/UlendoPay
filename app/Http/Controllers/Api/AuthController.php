@@ -626,7 +626,7 @@ class AuthController extends Controller
             'phone'            => $user->phone,
             'country_code'     => $user->country_code,
             'kyc_status'       => $user->kyc_status,
-            tier             => ->tier,
+            'tier'             => $user->tier,
             'status'           => $user->status,
             'is_staff'         => (bool) $user->is_staff,
             'role'             => $user->role,

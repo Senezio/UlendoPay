@@ -103,7 +103,7 @@ class AdminController extends Controller
                 'phone'        => $record->user->phone,
                 'country_code' => $record->user->country_code,
                 'kyc_status'   => $record->user->kyc_status,
-                tier         => ->user->tier,
+                'tier'         => $record->user->tier,
                 'created_at'   => $record->user->created_at,
             ],
         ]);
