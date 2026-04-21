@@ -187,6 +187,10 @@ class AdminController extends Controller
             $query->where('kyc_status', $request->kyc_status);
         }
 
+        if ($request->filled('tier')) {
+            $query->where('tier', $request->tier);
+        }
+
         $users = $query->latest()->paginate(25);
 
         return response()->json($users);
