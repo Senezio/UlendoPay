@@ -266,4 +266,29 @@ class PawapayPartner implements PartnerInterface
             ),
         };
     }
+
+
+    /**
+     * Predict the correspondent (network) for a given MSISDN.
+     * Uses PawaPay predict-correspondent endpoint — accounts for MNP.
+     */
+    public function predictCorrespondent(string $msisdn): ?string
+    {
+        try {
+            $response = Http::withToken($this->apiToken)
+                ->timeout(10)
+                ->post("{$this->baseUrl}/predict-correspondent", [
+                    'msisdn' => ltrim($msisdn, '+'),
+                ]);
+
+            if ($response->successful()) {
+                $body = $response->json();
+                return $body[correspondent] ?? null;
+            }
+
+            return null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
 }

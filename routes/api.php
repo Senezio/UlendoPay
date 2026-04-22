@@ -42,6 +42,7 @@ Route::prefix('v1')->group(function () {
         // Auth
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me',      [AuthController::class, 'me']);
+        Route::get('/users/lookup',  [AuthController::class, 'lookup']);
 
         // Transfer tiers
         Route::get('/tier', [\App\Http\Controllers\Api\TierController::class, 'show']);
@@ -81,6 +82,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/withdraw/history',            [WithdrawalController::class, 'history']);
 
         // Recipients
+        Route::post('/recipients/predict-network', [RecipientController::class, 'predictNetwork']);
         Route::apiResource('/recipients', RecipientController::class);
 
         // Rate locks

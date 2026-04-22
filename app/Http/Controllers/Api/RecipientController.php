@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Partners\PawapayPartner;
 use App\Models\Recipient;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -93,5 +94,71 @@ class RecipientController extends Controller
         $recipient->update(['is_active' => false]);
 
         return response()->json(['message' => 'Recipient removed.']);
+    }
+
+
+    /**
+     * Predict mobile network for a given phone number via PawaPay.
+     */
+    public function predictNetwork(Request $request): JsonResponse
+    {
+        $request->validate(['phone' => 'required|string|max:20']);
+
+        try {
+            $pawapay       = new PawapayPartner();
+            $correspondent = $pawapay->predictCorrespondent($request->phone);
+
+            if (! $correspondent) {
+                return response()->json(['found' => false], 404);
+            }
+
+            $operatorMap = [
+                'AIRTEL_MWI'        => 'AIRTEL',
+                'TNM_MWI'           => 'TNM',
+                'AIRTEL_TZA'        => 'AIRTEL',
+                'HALOTEL_TZA'       => 'HALOTEL',
+                'TIGO_TZA'          => 'TIGO',
+                'VODACOM_TZA'       => 'VODACOM',
+                'AIRTEL_OAPI_ZMB'   => 'AIRTEL',
+                'MTN_MOMO_ZMB'      => 'MTN',
+                'ZAMTEL_ZMB'        => 'ZAMTEL',
+                'MPESA_KEN'         => 'SAFARICOM',
+                'AIRTEL_RWA'        => 'AIRTEL',
+                'MTN_MOMO_RWA'      => 'MTN',
+                'AIRTEL_OAPI_UGA'   => 'AIRTEL',
+                'MTN_MOMO_UGA'      => 'MTN',
+                'AIRTELTIGO_GHA'    => 'AIRTELTIGO',
+                'MTN_MOMO_GHA'      => 'MTN',
+                'VODAFONE_GHA'      => 'VODAFONE',
+                'MTN_MOMO_CMR'      => 'MTN',
+                'ORANGE_CMR'        => 'ORANGE_CMR',
+                'AIRTEL_COD'        => 'AIRTEL',
+                'ORANGE_COD'        => 'ORANGE',
+                'VODACOM_MPESA_COD' => 'VODACOM',
+                'MOOV_BEN'          => 'MOOV',
+                'MTN_MOMO_BEN'      => 'MTN',
+                'ORANGE_SEN'        => 'ORANGE_SEN',
+                'FREE_SEN'          => 'FREE',
+                'MTN_MOMO_CIV'      => 'MTN_CIV',
+                'ORANGE_CIV'        => 'ORANGE_CIV',
+                'MOOV_BFA'          => 'MOOV_BFA',
+                'AIRTEL_COG'        => 'AIRTEL_COG',
+                'MTN_MOMO_COG'      => 'MTN_COG',
+                'AIRTEL_GAB'        => 'AIRTEL_GAB',
+                'VODACOM_MOZ'       => 'VODACOM',
+                'ORANGE_SLE'        => 'ORANGE',
+            ];
+
+            $operator = $operatorMap[$correspondent] ?? null;
+
+            return response()->json([
+                'found'         => true,
+                'correspondent' => $correspondent,
+                'operator'      => $operator,
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json(['found' => false, 'error' => 'Network detection unavailable'], 422);
+        }
     }
 }

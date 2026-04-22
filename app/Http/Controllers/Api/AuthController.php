@@ -860,6 +860,32 @@ class AuthController extends Controller
         $user->update(['email_verified_at' => now()]);
 
         return response()->json(['message' => 'Email verified successfully.']);
-    }
 
+    }
+    /**
+     * Look up a user by phone number.
+     * Returns minimal public info — used for recipient lookup in SendMoney.
+     */
+    public function lookup(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
+    {
+        $request->validate(['phone' => 'required|string|max:20']);
+
+        $phoneHash = hash('sha256', $request->phone);
+        $user = \App\Models\User::where('phone_hash', $phoneHash)
+            ->where('status', 'active')
+            ->first();
+
+        if (! $user) {
+            return response()->json(['found' => false], 404);
+        }
+
+        return response()->json([
+            'found' => true,
+            'user'  => [
+                'name'         => $user->name,
+                'kyc_verified' => $user->isKycVerified(),
+                'country_code' => $user->country_code,
+            ],
+        ]);
+    }
 }
