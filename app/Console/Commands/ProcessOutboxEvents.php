@@ -326,6 +326,162 @@ class ProcessOutboxEvents extends Command
         ]);
     }
 
+
+    private function handleInternalSettlement(OutboxEvent $event): void
+    {
+        $transaction = Transaction::findOrFail($event->payload['transaction_id']);
+
+        if (!in_array($transaction->status, ['escrowed', 'processing'])) {
+            throw new \RuntimeException(
+                "Transaction {$transaction->reference_number} is not in a settleable state. " .
+                "Current status: {$transaction->status}"
+            );
+        }
+
+        $transaction->update([
+            'status'          => 'processing',
+            'last_attempt_at' => now(),
+        ]);
+
+        $sendCurrency    = $transaction->send_currency;
+        $receiveCurrency = $transaction->receive_currency;
+        $escrowAmount    = (float) $transaction->send_amount
+                         - (float) $transaction->fee_amount
+                         - (float) $transaction->guarantee_contribution;
+
+        $escrowAccount = Account::where('type', 'escrow')
+            ->where('currency_code', $sendCurrency)
+            ->firstOrFail();
+
+        $sendPool = Account::where('type', 'system')
+            ->where('code', "{$sendCurrency}-POOL")
+            ->firstOrFail();
+
+        $receivePool = Account::where('type', 'system')
+            ->where('code', "{$receiveCurrency}-POOL")
+            ->firstOrFail();
+
+        $phoneHash     = hash('sha256', $transaction->recipient->mobile_number);
+        $recipientUser = User::where('phone_hash', $phoneHash)->first();
+
+        \Illuminate\Support\Facades\DB::transaction(function () use (
+            $transaction, $escrowAccount, $sendPool, $receivePool,
+            $recipientUser, $sendCurrency, $receiveCurrency,
+            $escrowAmount, $phoneHash
+        ) {
+            $ledger    = app(LedgerService::class);
+            $reference = $transaction->reference_number;
+
+            // Step 1 — Release escrow to send pool
+            $ledger->post(
+                reference:   "TXN-{$reference}-ESCROW-RELEASE",
+                type:        'transfer_escrow_release',
+                currency:    $sendCurrency,
+                entries: [
+                    [
+                        'account_id'  => $escrowAccount->id,
+                        'type'        => 'debit',
+                        'amount'      => $escrowAmount,
+                        'description' => "Escrow release: {$reference}",
+                    ],
+                    [
+                        'account_id'  => $sendPool->id,
+                        'type'        => 'credit',
+                        'amount'      => $escrowAmount,
+                        'description' => "Pool funded: {$reference}",
+                    ],
+                ],
+                description: "Escrow release for {$reference}"
+            );
+
+            // Step 2 — Credit recipient wallet from receive pool
+            if ($recipientUser) {
+                $recipientAccount = Account::where('owner_id', $recipientUser->id)
+                    ->where('owner_type', User::class)
+                    ->where('type', 'user_wallet')
+                    ->where('currency_code', $receiveCurrency)
+                    ->first();
+
+                if (!$recipientAccount) {
+                    throw new \RuntimeException(
+                        "Recipient has no {$receiveCurrency} wallet."
+                    );
+                }
+
+                $ledger->post(
+                    reference:   "TXN-{$reference}-CREDIT",
+                    type:        'transfer_credit',
+                    currency:    $receiveCurrency,
+                    entries: [
+                        [
+                            'account_id'  => $receivePool->id,
+                            'type'        => 'debit',
+                            'amount'      => (float) $transaction->receive_amount,
+                            'description' => "Pool disbursement: {$reference}",
+                        ],
+                        [
+                            'account_id'  => $recipientAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => (float) $transaction->receive_amount,
+                            'description' => "Transfer received: {$reference}",
+                        ],
+                    ],
+                    description: "Wallet credit for {$reference}"
+                );
+
+                OutboxEvent::create([
+                    'event_type'     => 'sms_notification',
+                    'transaction_id' => $transaction->id,
+                    'payload'        => [
+                        'type'      => 'transfer_received',
+                        'phone'     => $transaction->recipient->mobile_number,
+                        'amount'    => $transaction->receive_amount,
+                        'currency'  => $receiveCurrency,
+                        'reference' => $reference,
+                    ],
+                    'status'          => 'pending',
+                    'next_attempt_at' => now(),
+                ]);
+
+            } else {
+                $maskedPhone = substr($transaction->recipient->mobile_number, 0, 4)
+                    . str_repeat('*', max(0, strlen($transaction->recipient->mobile_number) - 7))
+                    . substr($transaction->recipient->mobile_number, -3);
+
+                PendingClaim::create([
+                    'transaction_id'         => $transaction->id,
+                    'recipient_phone_hash'   => $phoneHash,
+                    'recipient_phone_masked' => $maskedPhone,
+                    'amount'                 => $transaction->receive_amount,
+                    'currency_code'          => $receiveCurrency,
+                    'status'                 => 'pending',
+                    'expires_at'             => now()->addHours(48),
+                ]);
+
+                Log::info("[outbox] Recipient not registered — PendingClaim created", [
+                    'reference' => $reference,
+                ]);
+            }
+
+            $transaction->update([
+                'status'       => 'completed',
+                'completed_at' => now(),
+            ]);
+
+            OutboxEvent::create([
+                'event_type'     => 'sms_notification',
+                'transaction_id' => $transaction->id,
+                'payload'        => [
+                    'type'      => 'transfer_completed',
+                    'reference' => $transaction->reference_number,
+                ],
+                'status'          => 'pending',
+                'next_attempt_at' => now(),
+            ]);
+        });
+
+        $this->line("[outbox] Internal settlement complete: {$transaction->reference_number}");
+    }
     private function queueRefundForFailedDisbursement(OutboxEvent $event): void
     {
         $transactionId = $event->payload['transaction_id'] ?? null;
