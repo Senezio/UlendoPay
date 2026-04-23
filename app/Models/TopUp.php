@@ -16,11 +16,12 @@ class TopUp extends Model
         'phone_number',
         'mobile_operator',
         'country_code',
-        'pawapay_deposit_id',
+        'provider',
+        'provider_reference',
         'correspondent',
-        'pawapay_request_payload',
-        'pawapay_response_payload',
-        'pawapay_webhook_payload',
+        'provider_request_payload',
+        'provider_response_payload',
+        'provider_webhook_payload',
         'status',
         'failure_reason',
         'initiated_at',
@@ -29,26 +30,24 @@ class TopUp extends Model
     ];
 
     protected $hidden = [
-        'pawapay_request_payload',
-        'pawapay_response_payload',
-        'pawapay_webhook_payload',
+        'provider_request_payload',
+        'provider_response_payload',
+        'provider_webhook_payload',
     ];
 
     protected $casts = [
-        'amount'                   => 'decimal:6',
-        'pawapay_request_payload'  => 'array',
-        'pawapay_response_payload' => 'array',
-        'pawapay_webhook_payload'  => 'array',
-        'initiated_at'             => 'datetime',
-        'completed_at'             => 'datetime',
-        'failed_at'                => 'datetime',
+        'amount'                    => 'decimal:6',
+        'provider_request_payload'  => 'array',
+        'provider_response_payload' => 'array',
+        'provider_webhook_payload'  => 'array',
+        'initiated_at'              => 'datetime',
+        'completed_at'              => 'datetime',
+        'failed_at'                 => 'datetime',
     ];
 
-    // Relationships
     public function user()   { return $this->belongsTo(User::class); }
     public function wallet() { return $this->belongsTo(Wallet::class); }
 
-    // Generate unique reference
     public static function generateReference(): string
     {
         do {

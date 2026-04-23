@@ -19,7 +19,7 @@ class PartnerSeeder extends Seeder
         ];
 
         $pawa = Partner::updateOrCreate(
-            ['code' => 'pawapay'],
+            ['code' => 'PAWAPAY'],
             [
                 'name'                  => 'PawaPay',
                 'type'                  => 'mobile_money',

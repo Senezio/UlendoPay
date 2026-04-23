@@ -108,7 +108,7 @@ class KycController extends Controller
             'rejection_reason'=> $record->rejection_reason,
             'submitted_at'    => $record->created_at,
             'reviewed_at'     => $record->reviewed_at,
-            requested_tier  => ->requested_tier,
+            'requested_tier' => $record->requested_tier,
         ];
     }
 }

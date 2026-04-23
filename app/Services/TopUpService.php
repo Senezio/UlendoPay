@@ -17,62 +17,63 @@ class TopUpService
 {
     private string $baseUrl;
     private string $apiToken;
-    private int $timeoutSeconds;
+    private int    $timeoutSeconds;
 
     private array $correspondentMap = [
-        'MWK:AIRTEL' => 'AIRTEL_MWI',
-        'MWK:TNM' => 'TNM_MWI',
-        'MWK:TNM_MPAMBA' => 'TNM_MPAMBA_MWI',
+        'MWK:AIRTEL'      => 'AIRTEL_MWI',
+        'MWK:TNM'         => 'TNM_MWI',
+        'MWK:TNM_MPAMBA'  => 'TNM_MPAMBA_MWI',
 
-        'TZS:VODACOM' => 'VODACOM_TZA',
-        'TZS:AIRTEL' => 'AIRTEL_TZA',
-        'TZS:TIGO' => 'TIGO_TZA',
-        'TZS:HALOTEL' => 'HALOTEL_TZA',
+        'TZS:VODACOM'     => 'VODACOM_TZA',
+        'TZS:AIRTEL'      => 'AIRTEL_TZA',
+        'TZS:TIGO'        => 'TIGO_TZA',
+        'TZS:HALOTEL'     => 'HALOTEL_TZA',
 
-        'KES:MPESA' => 'MPESA_KEN',
-        'KES:MPESA_V2' => 'MPESA_V2_KEN',
-        'KES:AIRTEL' => 'AIRTEL_KEN',
+        'KES:MPESA'       => 'MPESA_KEN',
+        'KES:MPESA_V2'    => 'MPESA_V2_KEN',
+        'KES:AIRTEL'      => 'AIRTEL_KEN',
 
-        'ZMW:AIRTEL' => 'AIRTEL_ZMB',
-        'ZMW:MTN' => 'MTN_MOMO_ZMB',
-        'ZMW:ZAMTEL' => 'ZAMTEL_ZMB',
+        'ZMW:AIRTEL'      => 'AIRTEL_ZMB',
+        'ZMW:MTN'         => 'MTN_MOMO_ZMB',
+        'ZMW:ZAMTEL'      => 'ZAMTEL_ZMB',
 
-        'GHS:MTN' => 'MTN_MOMO_GHA',
-        'GHS:VODAFONE' => 'VODAFONE_GHA',
-        'GHS:AIRTELTIGO' => 'AIRTELTIGO_GHA',
+        'GHS:MTN'         => 'MTN_MOMO_GHA',
+        'GHS:VODAFONE'    => 'VODAFONE_GHA',
+        'GHS:AIRTELTIGO'  => 'AIRTELTIGO_GHA',
 
-        'UGX:MTN' => 'MTN_MOMO_UGA',
-        'UGX:AIRTEL' => 'AIRTEL_UGA',
+        'UGX:MTN'         => 'MTN_MOMO_UGA',
+        'UGX:AIRTEL'      => 'AIRTEL_UGA',
 
-        'RWF:MTN' => 'MTN_MOMO_RWA',
-        'RWF:AIRTEL' => 'AIRTEL_RWA',
+        'RWF:MTN'         => 'MTN_MOMO_RWA',
+        'RWF:AIRTEL'      => 'AIRTEL_RWA',
 
-        'MZN:VODACOM' => 'VODACOM_MOZ',
-        'MZN:MOVITEL' => 'MOVITEL_MOZ',
+        'MZN:VODACOM'     => 'VODACOM_MOZ',
+        'MZN:MOVITEL'     => 'MOVITEL_MOZ',
 
-        'ETB:TELEBIRR' => 'TELEBIRR_ETH',
-        'ETB:MPESA' => 'MPESA_ETH',
+        'ETB:TELEBIRR'    => 'TELEBIRR_ETH',
+        'ETB:MPESA'       => 'MPESA_ETH',
 
-        'XOF:ORANGE' => 'ORANGE_SEN',
-        'XOF:FREE' => 'FREE_SEN',
-        'XOF:WAVE' => 'WAVE_SEN',
+        'XOF:ORANGE'      => 'ORANGE_SEN',
+        'XOF:FREE'        => 'FREE_SEN',
+        'XOF:WAVE'        => 'WAVE_SEN',
 
-        'NGN:MTN' => 'MTN_MOMO_NGA',
-        'NGN:AIRTEL' => 'AIRTEL_NGA',
+        'NGN:MTN'         => 'MTN_MOMO_NGA',
+        'NGN:AIRTEL'      => 'AIRTEL_NGA',
 
-        'XAF:MTN' => 'MTN_MOMO_CMR',
-        'XAF:ORANGE' => 'ORANGE_CMR',
+        'XAF:MTN'         => 'MTN_MOMO_CMR',
+        'XAF:ORANGE'      => 'ORANGE_CMR',
 
-        'CDF:VODACOM' => 'VODACOM_COD',
-        'CDF:AIRTEL' => 'AIRTEL_COD',
-        'CDF:ORANGE' => 'ORANGE_COD',
+        'CDF:VODACOM'     => 'VODACOM_COD',
+        'CDF:AIRTEL'      => 'AIRTEL_COD',
+        'CDF:ORANGE'      => 'ORANGE_COD',
+
         'ZAR:MTN'         => 'MTN_MOMO_ZAF',
     ];
 
     public function __construct()
     {
-        $this->baseUrl = config('services.pawapay.base_url', 'https://api.pawapay.io');
-        $this->apiToken = config('services.pawapay.api_token', '');
+        $this->baseUrl        = config('services.pawapay.base_url', 'https://api.pawapay.io');
+        $this->apiToken       = config('services.pawapay.api_token', '');
         $this->timeoutSeconds = config('services.pawapay.timeout', 30);
 
         if (empty($this->apiToken)) {
@@ -80,8 +81,12 @@ class TopUpService
         }
     }
 
-    public function initiate(User $user, string $phoneNumber, string $mobileOperator, float $amount): TopUp
-    {
+    public function initiate(
+        User   $user,
+        string $phoneNumber,
+        string $mobileOperator,
+        float  $amount
+    ): TopUp {
         $wallet = $user->wallets()->where('status', 'active')->first();
 
         if (!$wallet) {
@@ -94,8 +99,46 @@ class TopUpService
             throw new \RuntimeException("Minimum top-up amount is 1 {$currency}.");
         }
 
+        $countryCode = $user->country_code ?? $this->currencyToCountry($currency);
+
+        // ── Route to MTN MoMo ────────────────────────────────────────────────
+        $mtnMomo = new MtnMomoService();
+        if ($mtnMomo->supportsCurrency($currency)) {
+            $topUp = TopUp::create([
+                'reference'       => TopUp::generateReference(),
+                'user_id'         => $user->id,
+                'wallet_id'       => $wallet->id,
+                'amount'          => $amount,
+                'currency_code'   => $currency,
+                'phone_number'    => $phoneNumber,
+                'mobile_operator' => $mobileOperator,
+                'country_code'    => $countryCode,
+                'provider'        => 'mtnmomo',
+                'correspondent'   => 'MTN_MOMO',
+                'status'          => 'initiated',
+                'initiated_at'    => now(),
+            ]);
+
+            // MtnMomoService returns the reference — this service owns the record
+            $mtnReference = $mtnMomo->initiateTopUp(
+                user:              $user,
+                phoneNumber:       $phoneNumber,
+                amount:            $amount,
+                currency:          $currency,
+                externalReference: $topUp->reference
+            );
+
+            $topUp->update([
+                'provider_reference' => $mtnReference,
+                'status'             => 'pending',
+            ]);
+
+            return $topUp->fresh();
+        }
+
+        // ── Route to PawaPay ─────────────────────────────────────────────────
         $correspondentKey = "{$currency}:{$mobileOperator}";
-        $correspondent = $this->correspondentMap[$correspondentKey] ?? null;
+        $correspondent    = $this->correspondentMap[$correspondentKey] ?? null;
 
         if (!$correspondent) {
             throw new \RuntimeException(
@@ -104,43 +147,37 @@ class TopUpService
             );
         }
 
-        $countryCode = $user->country_code ?? $this->currencyToCountry($currency);
-        $pawapayDepositId = (string) Str::uuid();
+        $providerReference = (string) Str::uuid();
 
         $topUp = TopUp::create([
-            'reference' => TopUp::generateReference(),
-            'user_id' => $user->id,
-            'wallet_id' => $wallet->id,
-            'amount' => $amount,
-            'currency_code' => $currency,
-            'phone_number' => $phoneNumber,
-            'mobile_operator' => $mobileOperator,
-            'country_code' => $countryCode,
-            'correspondent' => $correspondent,
-            'pawapay_deposit_id' => $pawapayDepositId,
-            'status' => 'initiated',
-            'initiated_at' => now(),
+            'reference'          => TopUp::generateReference(),
+            'user_id'            => $user->id,
+            'wallet_id'          => $wallet->id,
+            'amount'             => $amount,
+            'currency_code'      => $currency,
+            'phone_number'       => $phoneNumber,
+            'mobile_operator'    => $mobileOperator,
+            'country_code'       => $countryCode,
+            'provider'           => 'pawapay',
+            'provider_reference' => $providerReference,
+            'correspondent'      => $correspondent,
+            'status'             => 'initiated',
+            'initiated_at'       => now(),
         ]);
 
         $payload = [
-            'depositId' => $pawapayDepositId,
-            'amount' => number_format($amount, 2, '.', ''),
-            'currency' => $currency,
-            'country' => $this->currencyToCountry($currency),
-            'correspondent' => $correspondent,
-            'payer' => [
-                'type' => 'MSISDN',
+            'depositId'            => $providerReference,
+            'amount'               => number_format($amount, 2, '.', ''),
+            'currency'             => $currency,
+            'country'              => $this->currencyToCountry($currency),
+            'correspondent'        => $correspondent,
+            'payer'                => [
+                'type'    => 'MSISDN',
                 'address' => ['value' => ltrim($phoneNumber, '+')],
             ],
-            'customerTimestamp' => now()->toIso8601String(),
+            'customerTimestamp'    => now()->toIso8601String(),
             'statementDescription' => 'Ulendo Pay topup',
         ];
-
-        // ✅ YOUR CONDITIONAL — preserved
-        if ($correspondent === "MTN_MOMO_ZAF") {
-            app(MtnMomoService::class)->initiateTopUp($user, $phoneNumber, $amount, $currency, $topUp);
-            return $topUp->fresh();
-        }
 
         try {
             $response = Http::withToken($this->apiToken)
@@ -149,26 +186,26 @@ class TopUpService
 
             $body = $response->json() ?? [];
 
-            Log::info('[TopUpService] Pawapay deposit initiated', [
-                'reference' => $topUp->reference,
-                'pawapay_deposit_id' => $pawapayDepositId,
-                'http_status' => $response->status(),
-                'body' => $body,
+            Log::info('[TopUpService] PawaPay deposit initiated', [
+                'reference'          => $topUp->reference,
+                'provider_reference' => $providerReference,
+                'http_status'        => $response->status(),
+                'body'               => $body,
             ]);
 
             $topUp->update([
-                'pawapay_request_payload' => $payload,
-                'pawapay_response_payload' => $body,
-                'status' => 'pending',
+                'provider_request_payload'  => $payload,
+                'provider_response_payload' => $body,
+                'status'                    => 'pending',
             ]);
 
             if (!$response->successful() || ($body['status'] ?? '') === 'REJECTED') {
                 $reason = $body['rejectionReason']['rejectionCode'] ?? 'Unknown rejection';
 
                 $topUp->update([
-                    'status' => 'failed',
+                    'status'         => 'failed',
                     'failure_reason' => $reason,
-                    'failed_at' => now(),
+                    'failed_at'      => now(),
                 ]);
 
                 throw new \RuntimeException($this->friendlyRejectionMessage($reason));
@@ -176,94 +213,55 @@ class TopUpService
 
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             $topUp->update([
-                'status' => 'failed',
+                'status'         => 'failed',
                 'failure_reason' => 'Connection timeout: ' . $e->getMessage(),
-                'failed_at' => now(),
+                'failed_at'      => now(),
             ]);
 
             throw new \RuntimeException('Could not connect to payment provider. Please try again.');
         }
 
         AuditLog::create([
-            'user_id' => $user->id,
-            'action' => 'topup.initiated',
+            'user_id'     => $user->id,
+            'action'      => 'topup.initiated',
             'entity_type' => 'TopUp',
-            'entity_id' => $topUp->id,
-            'new_values' => [
+            'entity_id'   => $topUp->id,
+            'new_values'  => [
                 'reference' => $topUp->reference,
-                'amount' => $amount,
-                'currency' => $currency,
-                'operator' => $mobileOperator,
+                'amount'    => $amount,
+                'currency'  => $currency,
+                'operator'  => $mobileOperator,
+                'provider'  => 'pawapay',
             ],
         ]);
 
         return $topUp->fresh();
     }
 
-    public function getAvailableOperators(string $currency): string
-    {
-        return collect($this->correspondentMap)
-            ->keys()
-            ->filter(fn($k) => str_starts_with($k, "{$currency}:"))
-            ->map(fn($k) => explode(':', $k)[1])
-            ->values()
-            ->implode(', ');
-    }
-
-    public function getSupportedOperators(string $currency): array
-    {
-        return collect($this->correspondentMap)
-            ->keys()
-            ->filter(fn($k) => str_starts_with($k, "{$currency}:"))
-            ->map(fn($k) => explode(':', $k)[1])
-            ->values()
-            ->toArray();
-    }
-
-    private function currencyToCountry(string $currency): string
-    {
-        return match ($currency) {
-            'MWK' => 'MWI',
-            'TZS' => 'TZA',
-            'KES' => 'KEN',
-            'ZMW' => 'ZMB',
-            'GHS' => 'GHA',
-            'UGX' => 'UGA',
-            'RWF' => 'RWA',
-            'MZN' => 'MOZ',
-            'ETB' => 'ETH',
-            'XOF' => 'SEN',
-            'NGN' => 'NGA',
-            'XAF' => 'CMR',
-            'ZAR' => 'ZAF',
-            'CDF' => 'COD',
-            default => throw new \InvalidArgumentException("Unsupported currency: {$currency}"),
-        };
-    }
     /**
-     * Handle incoming webhook from PawaPay or MTN MoMo after deposit status update.
-     * CRITICAL: Must be idempotent — safe to call multiple times with same payload.
-     *
-     * Money flow on COMPLETED:
-     *   DEBIT  system pool  → money arrived in platform
-     *   CREDIT user wallet  → user balance increases
+     * Handle incoming webhook from PawaPay or MTN MoMo.
+     * Lookup is by provider_reference — works for both providers.
+     * CRITICAL: Must be idempotent.
      */
     public function handleWebhook(array $payload): void
     {
-        $depositId = $payload['depositId'] ?? $payload['externalId'] ?? null;
-        $status    = $payload['status'] ?? null;
+        // PawaPay sends depositId; MTN sends externalId
+        $providerReference = $payload['depositId'] ?? $payload['externalId'] ?? null;
+        $status            = $payload['status'] ?? null;
 
-        if (!$depositId || !$status) {
-            Log::warning('[TopUpService] Invalid webhook payload — missing depositId or status', $payload);
+        if (!$providerReference || !$status) {
+            Log::warning('[TopUpService] Invalid webhook payload — missing reference or status', $payload);
             return;
         }
 
-        $topUp = TopUp::where('pawapay_deposit_id', $depositId)
-            ->orWhere('reference', $depositId)
+        $topUp = TopUp::where('provider_reference', $providerReference)
+            ->orWhere('reference', $providerReference)
             ->first();
 
         if (!$topUp) {
-            Log::error('[TopUpService] TopUp not found for deposit', ['depositId' => $depositId]);
+            Log::error('[TopUpService] TopUp not found for provider reference', [
+                'provider_reference' => $providerReference,
+            ]);
             return;
         }
 
@@ -274,11 +272,15 @@ class TopUpService
             return;
         }
 
-        $topUp->update(['pawapay_webhook_payload' => $payload]);
+        $topUp->update(['provider_webhook_payload' => $payload]);
 
-        if ($status === 'COMPLETED') {
+        $completedStatuses = ['COMPLETED', 'SUCCESSFUL'];
+        $failedStatuses    = ['FAILED', 'REJECTED', 'TIMED_OUT', 'CANCELLED'];
+
+        if (in_array($status, $completedStatuses)) {
             $this->creditUserWallet($topUp);
-        } elseif (in_array($status, ['FAILED', 'REJECTED', 'TIMED_OUT', 'CANCELLED'])) {
+
+        } elseif (in_array($status, $failedStatuses)) {
             $reason = $payload['rejectionReason']['rejectionCode']
                 ?? $payload['failureReason']
                 ?? $status;
@@ -305,27 +307,21 @@ class TopUpService
             Log::info('[TopUpService] TopUp failed via webhook', [
                 'reference' => $topUp->reference,
                 'reason'    => $reason,
+                'provider'  => $topUp->provider,
             ]);
+
         } else {
             Log::info('[TopUpService] Webhook received intermediate status', [
                 'reference' => $topUp->reference,
                 'status'    => $status,
+                'provider'  => $topUp->provider,
             ]);
         }
     }
 
-    /**
-     * Credit user wallet after confirmed top-up.
-     * Called from webhook handler for both PawaPay and MTN MoMo.
-     *
-     * Double-entry:
-     *   DEBIT  system pool account  → money received into platform
-     *   CREDIT user wallet account  → user balance increases
-     */
     private function creditUserWallet(TopUp $topUp): void
     {
         DB::transaction(function () use ($topUp) {
-
             $currency = $topUp->currency_code;
 
             $userAccount = Account::where('owner_id', $topUp->user_id)
@@ -375,6 +371,7 @@ class TopUpService
                     'reference' => $topUp->reference,
                     'amount'    => $topUp->amount,
                     'currency'  => $currency,
+                    'provider'  => $topUp->provider,
                 ],
             ]);
 
@@ -395,33 +392,66 @@ class TopUpService
                 'reference' => $topUp->reference,
                 'amount'    => $topUp->amount,
                 'currency'  => $currency,
+                'provider'  => $topUp->provider,
             ]);
         });
     }
 
+    public function getAvailableOperators(string $currency): string
+    {
+        return collect($this->correspondentMap)
+            ->keys()
+            ->filter(fn($k) => str_starts_with($k, "{$currency}:"))
+            ->map(fn($k) => explode(':', $k)[1])
+            ->values()
+            ->implode(', ');
+    }
+
+    public function getSupportedOperators(string $currency): array
+    {
+        return collect($this->correspondentMap)
+            ->keys()
+            ->filter(fn($k) => str_starts_with($k, "{$currency}:"))
+            ->map(fn($k) => explode(':', $k)[1])
+            ->values()
+            ->toArray();
+    }
+
+    private function currencyToCountry(string $currency): string
+    {
+        return match ($currency) {
+            'MWK' => 'MWI',
+            'TZS' => 'TZA',
+            'KES' => 'KEN',
+            'ZMW' => 'ZMB',
+            'GHS' => 'GHA',
+            'UGX' => 'UGA',
+            'RWF' => 'RWA',
+            'MZN' => 'MOZ',
+            'ETB' => 'ETH',
+            'XOF' => 'SEN',
+            'NGN' => 'NGA',
+            'XAF' => 'CMR',
+            'ZAR' => 'ZAF',
+            'CDF' => 'COD',
+            default => throw new \InvalidArgumentException("Unsupported currency: {$currency}"),
+        };
+    }
 
     private function friendlyRejectionMessage(string $code): string
     {
         return match($code) {
-            'AMOUNT_TOO_LARGE'           => 'The amount exceeds the maximum allowed for a single transaction. Please try a smaller amount.',
-            'AMOUNT_TOO_SMALL'           => 'The amount is below the minimum allowed. Please enter a larger amount.',
-            'INSUFFICIENT_FUNDS'         => 'Your mobile money account has insufficient funds. Please top up your mobile wallet and try again.',
-            'INVALID_CALLBACK_URL'       => 'Payment could not be processed. Please contact support.',
-            'INVALID_CORRESPONDENT'      => 'This mobile network is not supported for this transaction.',
-            'INVALID_CURRENCY'           => 'The currency used is not supported for this transaction.',
-            'INVALID_MSISDN'             => 'The phone number entered is invalid. Please check and try again.',
-            'LIMIT_REACHED'              => 'You have reached your daily or monthly transaction limit on your mobile wallet.',
-            'NOT_ALLOWED'                => 'This transaction is not permitted on your account. Please contact your mobile network.',
-            'NOT_ALLOWED_COUNTRY'        => 'Transactions from your country are currently not supported.',
-            'PAYEE_REJECTED'             => 'The payment was declined by your mobile network. Please try again or contact your network provider.',
-            'PAYER_LIMIT_REACHED'        => 'You have reached your transaction limit. Please try again tomorrow or contact your mobile network.',
-            'RECEIVER_INVALID'           => 'The recipient phone number is invalid. Please check and try again.',
-            'REQUEST_CANCELLED'          => 'The payment request was cancelled. Please try again.',
-            'SERVICE_UNAVAILABLE'        => 'The mobile payment service is temporarily unavailable. Please try again in a few minutes.',
-            'SYSTEM_ERROR'               => 'A system error occurred. Please try again or contact support.',
-            'TIMED_OUT'                  => 'The payment request timed out. Please try again.',
-            'UNSPECIFIED_REJECTION'      => 'Your payment was declined. Please try again or contact your mobile network provider.',
-            default                      => 'Your payment could not be processed. Please try again or contact support.',
+            'AMOUNT_TOO_LARGE'      => 'The amount exceeds the maximum allowed. Please try a smaller amount.',
+            'AMOUNT_TOO_SMALL'      => 'The amount is below the minimum allowed.',
+            'INSUFFICIENT_FUNDS'    => 'Your mobile money account has insufficient funds.',
+            'INVALID_CORRESPONDENT' => 'This mobile network is not supported for this transaction.',
+            'INVALID_CURRENCY'      => 'The currency used is not supported.',
+            'INVALID_MSISDN'        => 'The phone number entered is invalid.',
+            'LIMIT_REACHED'         => 'You have reached your transaction limit.',
+            'PAYEE_REJECTED'        => 'The payment was declined by your mobile network.',
+            'SERVICE_UNAVAILABLE'   => 'The mobile payment service is temporarily unavailable.',
+            'TIMED_OUT'             => 'The payment request timed out. Please try again.',
+            default                 => 'Your payment could not be processed. Please try again or contact support.',
         };
     }
 }

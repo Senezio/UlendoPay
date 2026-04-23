@@ -12,14 +12,12 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-
 class WithdrawalService
 {
     private string $baseUrl;
     private string $apiToken;
     private int    $timeoutSeconds;
 
-    // Pawapay payout correspondent codes — verified against /v1/availability
     private array $correspondentMap = [
         // Malawi
         'MWK:AIRTEL'      => 'AIRTEL_MWI',
@@ -61,14 +59,14 @@ class WithdrawalService
         // Nigeria
         'NGN:MTN'         => 'MTN_MOMO_NGA',
         'NGN:AIRTEL'      => 'AIRTEL_NGA',
-        // Cameroon
+        // Cameroon / DRC
         'XAF:MTN'         => 'MTN_MOMO_CMR',
-        'ZAR:MTN'         => 'MTN_MOMO_ZAF',
         'XAF:ORANGE'      => 'ORANGE_CMR',
-        // DRC
         'CDF:VODACOM'     => 'VODACOM_COD',
         'CDF:AIRTEL'      => 'AIRTEL_COD',
         'CDF:ORANGE'      => 'ORANGE_COD',
+        // South Africa
+        'ZAR:MTN'         => 'MTN_MOMO_ZAF',
     ];
 
     public function __construct()
@@ -82,18 +80,12 @@ class WithdrawalService
         }
     }
 
-    /**
-     * Initiate a withdrawal — pushes funds to user's mobile money wallet.
-     *
-     * @throws \RuntimeException
-     */
     public function initiate(
         User   $user,
         string $phoneNumber,
         string $mobileOperator,
         float  $amount
     ): Withdrawal {
-        // Resolve active wallet
         $wallet = $user->wallets()->where('status', 'active')->first();
 
         if (!$wallet) {
@@ -106,8 +98,11 @@ class WithdrawalService
             throw new \RuntimeException("Minimum withdrawal amount is 1 {$currency}.");
         }
 
-        // Check sufficient balance
-        $userAccount = Account::where('owner_id', $user->id)->where('owner_type', User::class)->where('type', 'user_wallet')->where('currency_code', $currency)->first();
+        $userAccount = Account::where('owner_id', $user->id)
+            ->where('owner_type', User::class)
+            ->where('type', 'user_wallet')
+            ->where('currency_code', $currency)
+            ->first();
 
         if (!$userAccount) {
             throw new \RuntimeException("Wallet account not found.");
@@ -121,13 +116,26 @@ class WithdrawalService
             );
         }
 
-        // Route to MTN MoMo for supported currencies
+        $countryCode = $user->country_code ?? $this->currencyToCountry($currency);
+
+        // ── Route to MTN MoMo ────────────────────────────────────────────────
         $mtnMomo = new MtnMomoService();
         if ($mtnMomo->supportsCurrency($currency)) {
-            $countryCode = $user->country_code ?? $this->currencyToCountry($currency);
-            $withdrawal = DB::transaction(function () use ($user, $wallet, $amount, $currency, $phoneNumber, $mobileOperator, $countryCode) {
-                $userAccount = Account::where('owner_id', $user->id)->where('owner_type', User::class)->where('type', 'user_wallet')->where('currency_code', $currency)->lockForUpdate()->firstOrFail();
-                $systemAccount = Account::where('code', "{$currency}-POOL")->lockForUpdate()->firstOrFail();
+            $withdrawal = DB::transaction(function () use (
+                $user, $wallet, $amount, $currency,
+                $phoneNumber, $mobileOperator, $countryCode
+            ) {
+                $userAccount = Account::where('owner_id', $user->id)
+                    ->where('owner_type', User::class)
+                    ->where('type', 'user_wallet')
+                    ->where('currency_code', $currency)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $systemAccount = Account::where('code', "{$currency}-POOL")
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
                 $withdrawal = Withdrawal::create([
                     'reference'       => Withdrawal::generateReference(),
                     'user_id'         => $user->id,
@@ -137,27 +145,54 @@ class WithdrawalService
                     'phone_number'    => $phoneNumber,
                     'mobile_operator' => $mobileOperator,
                     'country_code'    => $countryCode,
+                    'provider'        => 'mtnmomo',
                     'correspondent'   => 'MTN_MOMO',
                     'status'          => 'initiated',
                     'initiated_at'    => now(),
                 ]);
+
                 app(LedgerService::class)->post(
-                    reference: "WDR-{$withdrawal->reference}",
-                    type: 'adjustment',
-                    currency: $currency,
+                    reference:   "WDR-{$withdrawal->reference}",
+                    type:        'adjustment',
+                    currency:    $currency,
                     entries: [
-                        ['account_id' => $userAccount->id,   'type' => 'debit',  'amount' => $amount, 'description' => "Withdrawal: {$withdrawal->reference}"],
-                        ['account_id' => $systemAccount->id, 'type' => 'credit', 'amount' => $amount, 'description' => "Withdrawal held: {$withdrawal->reference}"],
+                        [
+                            'account_id'  => $userAccount->id,
+                            'type'        => 'debit',
+                            'amount'      => $amount,
+                            'description' => "Withdrawal: {$withdrawal->reference}",
+                        ],
+                        [
+                            'account_id'  => $systemAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => $amount,
+                            'description' => "Withdrawal held: {$withdrawal->reference}",
+                        ],
                     ],
                     description: "MTN MoMo withdrawal: {$withdrawal->reference}"
                 );
+
                 return $withdrawal;
             });
-            $mtnMomo->initiateWithdrawal($user, $phoneNumber, $amount, $currency, $withdrawal);
+
+            // MtnMomoService returns the reference — this service owns the record
+            $mtnReference = $mtnMomo->initiateWithdrawal(
+                user:              $user,
+                phoneNumber:       $phoneNumber,
+                amount:            $amount,
+                currency:          $currency,
+                externalReference: $withdrawal->reference
+            );
+
+            $withdrawal->update([
+                'provider_reference' => $mtnReference,
+                'status'             => 'pending',
+            ]);
+
             return $withdrawal->fresh();
         }
 
-        // Resolve Pawapay correspondent
+        // ── Route to PawaPay ─────────────────────────────────────────────────
         $correspondentKey = "{$currency}:{$mobileOperator}";
         $correspondent    = $this->correspondentMap[$correspondentKey] ?? null;
 
@@ -168,15 +203,16 @@ class WithdrawalService
             );
         }
 
-        $countryCode      = $user->country_code ?? $this->currencyToCountry($currency);
-        $pawapayPayoutId  = (string) Str::uuid();
+        $providerReference = (string) Str::uuid();
 
-        // Debit wallet atomically before calling Pawapay
         $withdrawal = DB::transaction(function () use (
             $user, $wallet, $amount, $currency, $phoneNumber,
-            $mobileOperator, $countryCode, $correspondent, $pawapayPayoutId
+            $mobileOperator, $countryCode, $correspondent, $providerReference
         ) {
-            $userAccount = Account::where('owner_id', $user->id)->where('owner_type', User::class)->where('type', 'user_wallet')->where('currency_code', $currency)
+            $userAccount = Account::where('owner_id', $user->id)
+                ->where('owner_type', User::class)
+                ->where('type', 'user_wallet')
+                ->where('currency_code', $currency)
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -184,28 +220,27 @@ class WithdrawalService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // Create withdrawal record
             $withdrawal = Withdrawal::create([
-                'reference'         => Withdrawal::generateReference(),
-                'user_id'           => $user->id,
-                'wallet_id'         => $wallet->id,
-                'amount'            => $amount,
-                'currency_code'     => $currency,
-                'phone_number'      => $phoneNumber,
-                'mobile_operator'   => $mobileOperator,
-                'country_code'      => $countryCode,
-                'correspondent'     => $correspondent,
-                'pawapay_payout_id' => $pawapayPayoutId,
-                'status'            => 'initiated',
-                'initiated_at'      => now(),
+                'reference'          => Withdrawal::generateReference(),
+                'user_id'            => $user->id,
+                'wallet_id'          => $wallet->id,
+                'amount'             => $amount,
+                'currency_code'      => $currency,
+                'phone_number'       => $phoneNumber,
+                'mobile_operator'    => $mobileOperator,
+                'country_code'       => $countryCode,
+                'provider'           => 'pawapay',
+                'provider_reference' => $providerReference,
+                'correspondent'      => $correspondent,
+                'status'             => 'initiated',
+                'initiated_at'       => now(),
             ]);
 
-            // Debit user wallet via LedgerService
             app(LedgerService::class)->post(
                 reference:   "WDR-{$withdrawal->reference}",
                 type:        'adjustment',
                 currency:    $currency,
-                entries:     [
+                entries: [
                     [
                         'account_id'  => $userAccount->id,
                         'type'        => 'debit',
@@ -225,9 +260,8 @@ class WithdrawalService
             return $withdrawal;
         });
 
-        // Call Pawapay Payouts API
         $payload = [
-            'payoutId'             => $pawapayPayoutId,
+            'payoutId'             => $providerReference,
             'amount'               => number_format($amount, 2, '.', ''),
             'currency'             => $currency,
             'country'              => $this->currencyToCountry($currency),
@@ -247,31 +281,27 @@ class WithdrawalService
 
             $body = $response->json() ?? [];
 
-            Log::info('[WithdrawalService] Pawapay payout initiated', [
-                'reference'        => $withdrawal->reference,
-                'pawapay_payout_id' => $pawapayPayoutId,
-                'http_status'      => $response->status(),
-                'body'             => $body,
+            Log::info('[WithdrawalService] PawaPay payout initiated', [
+                'reference'          => $withdrawal->reference,
+                'provider_reference' => $providerReference,
+                'http_status'        => $response->status(),
+                'body'               => $body,
             ]);
 
             $withdrawal->update([
-                'pawapay_request_payload'  => $payload,
-                'pawapay_response_payload' => $body,
-                'status'                   => 'pending',
+                'provider_request_payload'  => $payload,
+                'provider_response_payload' => $body,
+                'status'                    => 'pending',
             ]);
 
             if (!$response->successful() || ($body['status'] ?? '') === 'REJECTED') {
                 $reason = $body['rejectionReason']['rejectionCode'] ?? 'Unknown rejection';
-
-                // Refund wallet on rejection
                 $this->refundWallet($withdrawal, $reason);
-
                 throw new \RuntimeException("Withdrawal rejected: {$reason}");
             }
 
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             $this->refundWallet($withdrawal, 'Connection timeout: ' . $e->getMessage());
-
             throw new \RuntimeException('Could not connect to payment provider. Please try again.');
         }
 
@@ -285,6 +315,7 @@ class WithdrawalService
                 'amount'    => $amount,
                 'currency'  => $currency,
                 'operator'  => $mobileOperator,
+                'provider'  => 'pawapay',
             ],
         ]);
 
@@ -292,40 +323,45 @@ class WithdrawalService
     }
 
     /**
-     * Handle incoming Pawapay webhook for payout status update.
+     * Handle incoming webhook from PawaPay or MTN MoMo.
+     * Lookup is by provider_reference — works for both providers.
      * CRITICAL: Must be idempotent.
      */
     public function handleWebhook(array $payload): void
     {
-        $payoutId = $payload['payoutId'] ?? null;
-        $status   = $payload['status'] ?? null;
+        // PawaPay sends payoutId; MTN sends externalId
+        $providerReference = $payload['payoutId'] ?? $payload['externalId'] ?? null;
+        $status            = $payload['status'] ?? null;
 
-        if (!$payoutId || !$status) {
+        if (!$providerReference || !$status) {
             Log::warning('[WithdrawalService] Invalid webhook payload', $payload);
             return;
         }
 
-        $withdrawal = Withdrawal::where('pawapay_payout_id', $payoutId)
-            ->orWhere('reference', $payoutId)
+        $withdrawal = Withdrawal::where('provider_reference', $providerReference)
+            ->orWhere('reference', $providerReference)
             ->first();
 
         if (!$withdrawal) {
-            Log::error('[WithdrawalService] Withdrawal not found for payout', [
-                'payoutId' => $payoutId,
+            Log::error('[WithdrawalService] Withdrawal not found for provider reference', [
+                'provider_reference' => $providerReference,
             ]);
             return;
         }
 
         if ($withdrawal->isCompleted()) {
             Log::info('[WithdrawalService] Webhook ignored — already completed', [
-                'payoutId' => $payoutId,
+                'provider_reference' => $providerReference,
             ]);
             return;
         }
 
-        $withdrawal->update(['pawapay_webhook_payload' => $payload]);
+        $withdrawal->update(['provider_webhook_payload' => $payload]);
 
-        if ($status === 'COMPLETED') {
+        $completedStatuses = ['COMPLETED', 'SUCCESSFUL'];
+        $failedStatuses    = ['FAILED', 'REJECTED', 'TIMED_OUT', 'EXPIRED'];
+
+        if (in_array($status, $completedStatuses)) {
             $withdrawal->update([
                 'status'       => 'completed',
                 'completed_at' => now(),
@@ -336,7 +372,6 @@ class WithdrawalService
                 'transaction_id' => null,
                 'payload'        => [
                     'type'      => 'withdrawal_completed',
-                    'user_id'   => $withdrawal->user_id,
                     'phone'     => $withdrawal->phone_number,
                     'amount'    => $withdrawal->amount,
                     'currency'  => $withdrawal->currency_code,
@@ -354,16 +389,16 @@ class WithdrawalService
                     'reference' => $withdrawal->reference,
                     'amount'    => $withdrawal->amount,
                     'currency'  => $withdrawal->currency_code,
+                    'provider'  => $withdrawal->provider,
                 ],
             ]);
 
             Log::info('[WithdrawalService] Withdrawal completed', [
                 'reference' => $withdrawal->reference,
-                'amount'    => $withdrawal->amount,
-                'currency'  => $withdrawal->currency_code,
+                'provider'  => $withdrawal->provider,
             ]);
 
-        } elseif (in_array($status, ['FAILED', 'REJECTED', 'TIMED_OUT', 'EXPIRED'])) {
+        } elseif (in_array($status, $failedStatuses)) {
             $reason = $payload['rejectionReason']['rejectionCode'] ?? $status;
             $this->refundWallet($withdrawal, $reason);
 
@@ -372,11 +407,11 @@ class WithdrawalService
                 'transaction_id' => null,
                 'payload'        => [
                     'type'      => 'withdrawal_failed',
-                    'user_id'   => $withdrawal->user_id,
                     'phone'     => $withdrawal->phone_number,
                     'amount'    => $withdrawal->amount,
                     'currency'  => $withdrawal->currency_code,
                     'reference' => $withdrawal->reference,
+                    'reason'    => $reason,
                 ],
                 'status' => 'pending',
             ]);
@@ -384,34 +419,44 @@ class WithdrawalService
             Log::warning('[WithdrawalService] Withdrawal failed via webhook', [
                 'reference' => $withdrawal->reference,
                 'reason'    => $reason,
+                'provider'  => $withdrawal->provider,
             ]);
         }
     }
 
-    /**
-     * Refund wallet when withdrawal fails or is rejected.
-     * Reverses the debit posted during initiation.
-     */
     public function refundPendingStuck(Withdrawal $withdrawal): void
     {
         if ($withdrawal->status !== 'pending') {
-            throw new \RuntimeException("Withdrawal {$withdrawal->reference} is not in pending state.");
+            throw new \RuntimeException(
+                "Withdrawal {$withdrawal->reference} is not in pending state."
+            );
         }
-        $this->refundWallet($withdrawal, 'Auto-recovery: withdrawal stuck in pending state for over 60 minutes — no webhook received');
+        $this->refundWallet(
+            $withdrawal,
+            'Auto-recovery: withdrawal stuck in pending state for over 60 minutes — no webhook received'
+        );
     }
 
     public function refundStuck(Withdrawal $withdrawal): void
     {
         if ($withdrawal->status !== 'initiated') {
-            throw new \RuntimeException("Withdrawal {$withdrawal->reference} is not in initiated state.");
+            throw new \RuntimeException(
+                "Withdrawal {$withdrawal->reference} is not in initiated state."
+            );
         }
-        $this->refundWallet($withdrawal, 'Auto-recovery: withdrawal stuck in initiated state for over 15 minutes');
+        $this->refundWallet(
+            $withdrawal,
+            'Auto-recovery: withdrawal stuck in initiated state for over 15 minutes'
+        );
     }
 
     private function refundWallet(Withdrawal $withdrawal, string $reason): void
     {
         DB::transaction(function () use ($withdrawal, $reason) {
-            $userAccount = Account::where('owner_id', $withdrawal->user_id)->where('owner_type', User::class)->where('type', 'user_wallet')->where('currency_code', $withdrawal->currency_code)
+            $userAccount = Account::where('owner_id', $withdrawal->user_id)
+                ->where('owner_type', User::class)
+                ->where('type', 'user_wallet')
+                ->where('currency_code', $withdrawal->currency_code)
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -423,7 +468,7 @@ class WithdrawalService
                 reference:   "WDR-REFUND-{$withdrawal->reference}",
                 type:        'adjustment',
                 currency:    $withdrawal->currency_code,
-                entries:     [
+                entries: [
                     [
                         'account_id'  => $systemAccount->id,
                         'type'        => 'debit',

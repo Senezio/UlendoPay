@@ -26,7 +26,24 @@ Route::prefix('v1')->group(function () {
         Route::post('/reset-password',  [AuthController::class, 'resetPassword']);
     });
 
-    // ── Webhooks — public, secured via signature verification ────────────────
+    // ── Webhooks — public, secured via per-provider verification ────────────
+    //
+    // PawaPay: HMAC-SHA256 signature on raw body (X-Pawapay-Signature header)
+    // MTN MoMo: verify-by-polling — status confirmed via MTN API callback
+    //
+    // Configure these URLs in each provider's dashboard:
+    //   PawaPay deposits  → /api/v1/topup/webhook/pawapay
+    //   PawaPay payouts   → /api/v1/withdraw/webhook/pawapay
+    //   MTN collections   → /api/v1/topup/webhook/mtn
+    //   MTN disbursements → /api/v1/withdraw/webhook/mtn
+    //
+    Route::post('/topup/webhook/pawapay',   [TopUpController::class, 'pawapayWebhook']);
+    Route::post('/topup/webhook/mtn',       [TopUpController::class, 'mtnWebhook']);
+    Route::post('/withdraw/webhook/pawapay',[WithdrawalController::class, 'pawapayWebhook']);
+    Route::post('/withdraw/webhook/mtn',    [WithdrawalController::class, 'mtnWebhook']);
+
+    // Legacy webhook routes — kept for simulator backward compatibility
+    // TODO: Update ulendopay_sim.py to use /pawapay endpoints, then remove these
     Route::post('/topup/webhook',    [TopUpController::class, 'webhook']);
     Route::post('/withdraw/webhook', [WithdrawalController::class, 'webhook']);
 
@@ -97,79 +114,78 @@ Route::prefix('v1')->group(function () {
         // ── Admin routes ─────────────────────────────────────────────────────
         Route::prefix('admin')->middleware('admin')->group(function () {
 
-            // Dashboard
-            Route::get('/stats', [AdminController::class, 'stats']);
+            Route::get('/stats',     [AdminController::class, 'stats']);
             Route::get('/analytics', [AdminController::class, 'analytics']);
+            Route::get('/accounts',  [AdminController::class, 'accounts']);
 
-            Route::get("/accounts", [AdminController::class, "accounts"]);
             // KYC
-            Route::get('/settings',               [AdminController::class, 'settings']);
-            Route::get('/kyc/queue',             [AdminController::class, 'kycQueue']);
-            Route::get('/kyc/{id}',              [AdminController::class, 'kycShow']);
-            Route::post('/kyc/{id}/approve',     [AdminController::class, 'kycApprove'])
+            Route::get('/settings',          [AdminController::class, 'settings']);
+            Route::get('/kyc/queue',         [AdminController::class, 'kycQueue']);
+            Route::get('/kyc/{id}',          [AdminController::class, 'kycShow']);
+            Route::post('/kyc/{id}/approve', [AdminController::class, 'kycApprove'])
                 ->middleware('admin:super_admin,kyc_reviewer');
-            Route::post('/kyc/{id}/reject',      [AdminController::class, 'kycReject'])
+            Route::post('/kyc/{id}/reject',  [AdminController::class, 'kycReject'])
                 ->middleware('admin:super_admin,kyc_reviewer');
 
             // Users
-            Route::get('/users',                 [AdminController::class, 'users']);
-            Route::get('/users/{id}',            [AdminController::class, 'userShow']);
-            Route::post('/users/{id}/suspend',   [AdminController::class, 'userSuspend'])
+            Route::get('/users',               [AdminController::class, 'users']);
+            Route::get('/users/{id}',          [AdminController::class, 'userShow']);
+            Route::post('/users/{id}/suspend', [AdminController::class, 'userSuspend'])
                 ->middleware('admin:super_admin,finance_officer');
-            Route::post('/users/{id}/restore',   [AdminController::class, 'userRestore'])
+            Route::post('/users/{id}/restore', [AdminController::class, 'userRestore'])
                 ->middleware('admin:super_admin');
 
             // Transactions
-            Route::get('/transactions',                      [AdminController::class, 'transactions']);
-            Route::get('/transactions/export',               [AdminController::class, 'exportTransactions']);
-            Route::get('/transactions/{reference}',          [AdminController::class, 'transactionShow']);
-            Route::post('/transactions/{reference}/retry',   [AdminController::class, 'retryTransaction']);
-            Route::get('/partners/health',                   [AdminController::class, 'partnerHealth']);
+            Route::get('/transactions',                    [AdminController::class, 'transactions']);
+            Route::get('/transactions/export',             [AdminController::class, 'exportTransactions']);
+            Route::get('/transactions/{reference}',        [AdminController::class, 'transactionShow']);
+            Route::post('/transactions/{reference}/retry', [AdminController::class, 'retryTransaction']);
+            Route::get('/partners/health',                 [AdminController::class, 'partnerHealth']);
 
             // Exchange rates
-            Route::get('/rates',                           [AdminController::class, 'rates']);
-            Route::post('/rates/fetch',                    [AdminController::class, 'fetchRates'])
+            Route::get('/rates',        [AdminController::class, 'rates']);
+            Route::post('/rates/fetch', [AdminController::class, 'fetchRates'])
                 ->middleware('admin:super_admin');
 
             // Account management
-            Route::get('/accounts',                        [AdminController::class, 'accounts']);
-            Route::post('/accounts',                       [AdminController::class, 'accountCreate'])
+            Route::get('/accounts',              [AdminController::class, 'accounts']);
+            Route::post('/accounts',             [AdminController::class, 'accountCreate'])
                 ->middleware('admin:super_admin');
-            Route::post('/accounts/{id}/toggle',           [AdminController::class, 'accountToggle'])
+            Route::post('/accounts/{id}/toggle', [AdminController::class, 'accountToggle'])
                 ->middleware('admin:super_admin');
-            Route::get('/accounts/{id}/ledger',            [AdminController::class, 'accountLedger']);
-            Route::post('/accounts/{id}/adjust',           [AdminController::class, 'accountAdjust'])
+            Route::get('/accounts/{id}/ledger',  [AdminController::class, 'accountLedger']);
+            Route::post('/accounts/{id}/adjust', [AdminController::class, 'accountAdjust'])
                 ->middleware('admin:super_admin');
 
             // Partner management
-            Route::get('/partners',                        [AdminController::class, 'partners']);
-            Route::post('/partners/{id}/toggle',           [AdminController::class, 'partnerToggle'])
+            Route::get('/partners',                [AdminController::class, 'partners']);
+            Route::post('/partners/{id}/toggle',   [AdminController::class, 'partnerToggle'])
                 ->middleware('admin:super_admin');
-            Route::put('/corridors/{id}',                  [AdminController::class, 'corridorUpdate'])
+            Route::put('/corridors/{id}',          [AdminController::class, 'corridorUpdate'])
                 ->middleware('admin:super_admin');
-            Route::post('/corridors/{id}/toggle',          [AdminController::class, 'corridorToggle'])
+            Route::post('/corridors/{id}/toggle',  [AdminController::class, 'corridorToggle'])
                 ->middleware('admin:super_admin');
 
             // Fraud alerts
-            Route::get('/fraud-alerts',                    [AdminController::class, 'fraudAlerts']);
-            Route::post('/fraud-alerts/{id}/clear',        [AdminController::class, 'fraudAlertClear'])
+            Route::get('/fraud-alerts',               [AdminController::class, 'fraudAlerts']);
+            Route::post('/fraud-alerts/{id}/clear',   [AdminController::class, 'fraudAlertClear'])
                 ->middleware('admin:super_admin,finance_officer');
-            Route::post('/fraud-alerts/{id}/confirm',      [AdminController::class, 'fraudAlertConfirm'])
+            Route::post('/fraud-alerts/{id}/confirm', [AdminController::class, 'fraudAlertConfirm'])
                 ->middleware('admin:super_admin,finance_officer');
 
             // Tier management
-            Route::get('/tiers',                           [AdminController::class, 'tierList']);
-            Route::post('/tiers',                          [AdminController::class, 'tierCreate'])
+            Route::get('/tiers',                        [AdminController::class, 'tierList']);
+            Route::post('/tiers',                       [AdminController::class, 'tierCreate'])
                 ->middleware('admin:super_admin');
-            Route::put('/tiers/{id}',                      [AdminController::class, 'tierUpdate'])
+            Route::put('/tiers/{id}',                   [AdminController::class, 'tierUpdate'])
                 ->middleware('admin:super_admin');
-            Route::post('/users/{id}/upgrade-tier',        [AdminController::class, 'userUpgradeTier'])
+            Route::post('/users/{id}/upgrade-tier',     [AdminController::class, 'userUpgradeTier'])
                 ->middleware('admin:super_admin,kyc_reviewer');
 
-            // Staff management — super_admin only
-            Route::get('/staff',                           [AdminController::class, 'staffList'])
+            // Staff management
+            Route::get('/staff',  [AdminController::class, 'staffList'])
                 ->middleware('admin:super_admin');
-            Route::post('/staff',                          [AdminController::class, 'staffCreate'])
+            Route::post('/staff', [AdminController::class, 'staffCreate'])
                 ->middleware('admin:super_admin');
         });
     });
