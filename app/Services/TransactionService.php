@@ -385,10 +385,11 @@ class TransactionService
 
                     $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
 
-                    // Queue disbursement via outbox — all transfers go through PawaPay
-                    // regardless of whether the recipient is a registered UlendoPay user.
+                    // Queue internal settlement via outbox.
+                    // Escrow is released to MWK pool, recipient's ZMW wallet
+                    // is credited from ZMW pool. No partner/PawaPay call needed.
                     OutboxEvent::create([
-                        'event_type'     => 'disbursement_requested',
+                        'event_type'     => 'internal_settlement',
                         'transaction_id' => $transaction->id,
                         'payload'        => [
                             'transaction_id' => $transaction->id,

@@ -58,6 +58,7 @@ class ProcessOutboxEvents extends Command
         try {
             match ($event->event_type) {
                 'disbursement_requested'   => $this->handleDisbursement($event),
+                'internal_settlement'      => $this->handleInternalSettlement($event),
                 'refund_requested'         => $this->handleRefund($event),
                 'sms_notification'         => $this->handleSms($event),
                 'reconciliation_triggered' => $this->handleReconciliation($event),
@@ -225,6 +226,10 @@ class ProcessOutboxEvents extends Command
             ->where('code', "{$receiveCurrency}-POOL")
             ->firstOrFail();
 
+        $escrowAccount = Account::where('type', 'escrow')
+            ->where('currency_code', $receiveCurrency)
+            ->firstOrFail();
+
         if ($recipientUser) {
             $recipientAccount = Account::where('owner_id', $recipientUser->id)
                 ->where('owner_type', User::class)
@@ -241,7 +246,7 @@ class ProcessOutboxEvents extends Command
             }
 
             \Illuminate\Support\Facades\DB::transaction(function () use (
-                $transaction, $escrowAccount, $recipientAccount,
+                $transaction, $poolAccount, $escrowAccount, $recipientAccount,
                 $receiveCurrency, $receiveAmount, $reference, $recipientUser
             ) {
                 app(LedgerService::class)->post(
