@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\VerifiesWebhookSignature;
 use App\Models\TopUp;
-use App\Models\WebhookSignature;
 use App\Services\TopUpService;
 use App\Services\MtnMomoService;
 use Illuminate\Http\Request;
@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Log;
 
 class TopUpController extends Controller
 {
+    use VerifiesWebhookSignature;
+
     public function __construct(private readonly TopUpService $topUpService) {}
 
     public function operators(Request $request): JsonResponse
@@ -94,20 +96,17 @@ class TopUpController extends Controller
 
     /**
      * PawaPay deposit webhook.
-     * Secured via HMAC-SHA256 signature on raw request body.
-     * Header: X-Pawapay-Signature
+     * Secured via RFC-9421 ECDSA P-256 SHA-256 signature.
+     * See VerifiesWebhookSignature trait for verification logic.
      */
     public function pawapayWebhook(Request $request): JsonResponse
     {
-        $signature = $request->header('X-Pawapay-Signature') ?? '';
-
         Log::info('[TopUp][PawaPay] Webhook received', [
-            'signature' => substr($signature, 0, 20) . '...',
+            'all_headers' => $request->headers->all(),
         ]);
 
-        if (!$this->verifyPawapaySignature($request->getContent(), $signature)) {
+        if (!$this->verifyPawapaySignature($request)) {
             Log::warning('[TopUp][PawaPay] Invalid signature — webhook rejected');
-            // Return 200 to prevent PawaPay retrying a legitimately rejected webhook
             return response()->json(['message' => 'Signature verification failed.'], 200);
         }
 
@@ -135,7 +134,6 @@ class TopUpController extends Controller
 
         Log::info('[TopUp][MTN] Webhook received', ['payload' => $payload]);
 
-        // MTN sends externalId as our reference, and a referenceId as their UUID
         $mtnReference = $payload['referenceId']
             ?? $payload['externalId']
             ?? null;
@@ -147,8 +145,8 @@ class TopUpController extends Controller
 
         try {
             // Verify by calling back to MTN — never trust the payload alone
-            $mtnMomo       = new MtnMomoService();
-            $verifiedStatus = $mtnMomo->getTopUpStatus($mtnReference);
+            $mtnMomo         = new MtnMomoService();
+            $verifiedStatus  = $mtnMomo->getTopUpStatus($mtnReference);
             $confirmedStatus = $verifiedStatus['status'] ?? null;
 
             Log::info('[TopUp][MTN] Status verified', [
@@ -162,8 +160,8 @@ class TopUpController extends Controller
             }
 
             // Replace payload status with verified status from MTN API
-            $verifiedPayload             = $payload;
-            $verifiedPayload['status']   = $confirmedStatus;
+            $verifiedPayload              = $payload;
+            $verifiedPayload['status']    = $confirmedStatus;
             $verifiedPayload['depositId'] = $mtnReference;
 
             $this->topUpService->handleWebhook($verifiedPayload);
@@ -175,7 +173,6 @@ class TopUpController extends Controller
             ]);
         }
 
-        // Always return 200 — MTN will retry on non-200
         return response()->json(['message' => 'Webhook received.'], 200);
     }
 
@@ -186,63 +183,5 @@ class TopUpController extends Controller
     public function webhook(Request $request): JsonResponse
     {
         return $this->pawapayWebhook($request);
-    }
-
-    private function verifyPawapaySignature(string $body, string $signature): bool
-    {
-        // Always pass in non-production — enables simulator testing
-        if (config('app.env') !== 'production') {
-            // But still attempt verification if a secret is configured
-            // so we can catch signature bugs before going live
-            $webhookSecret = WebhookSignature::whereHas('partner', fn($q) =>
-                $q->where('code', 'PAWAPAY')->where('is_active', true)
-            )->where('is_active', true)->first();
-
-            if (!$webhookSecret) {
-                Log::info('[TopUp][PawaPay] No webhook secret configured — skipping verification in non-production');
-                return true;
-            }
-
-            try {
-                $secret   = decrypt($webhookSecret->secret_encrypted);
-                $expected = hash_hmac('sha256', $body, $secret);
-                $valid    = hash_equals($expected, $signature);
-
-                if (!$valid) {
-                    Log::warning('[TopUp][PawaPay] Signature mismatch in non-production — continuing anyway', [
-                        'expected' => substr($expected, 0, 20) . '...',
-                        'received' => substr($signature, 0, 20) . '...',
-                    ]);
-                }
-
-                return true; // Non-production always passes
-            } catch (\Throwable $e) {
-                Log::warning('[TopUp][PawaPay] Signature check error in non-production', [
-                    'error' => $e->getMessage(),
-                ]);
-                return true;
-            }
-        }
-
-        // Production — strict verification required
-        $webhookSecret = WebhookSignature::whereHas('partner', fn($q) =>
-            $q->where('code', 'PAWAPAY')->where('is_active', true)
-        )->where('is_active', true)->first();
-
-        if (!$webhookSecret) {
-            Log::error('[TopUp][PawaPay] No active webhook signature configured for PAWAPAY');
-            return false;
-        }
-
-        try {
-            $secret   = decrypt($webhookSecret->secret_encrypted);
-            $expected = hash_hmac('sha256', $body, $secret);
-            return hash_equals($expected, $signature);
-        } catch (\Throwable $e) {
-            Log::error('[TopUp][PawaPay] Signature verification error', [
-                'error' => $e->getMessage(),
-            ]);
-            return false;
-        }
     }
 }

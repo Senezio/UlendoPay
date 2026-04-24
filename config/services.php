@@ -36,9 +36,10 @@ return [
     ],
 
     'pawapay' => [
-        'base_url'  => env('PAWAPAY_BASE_URL', 'https://api.pawapay.io'),
-        'api_token' => env('PAWAPAY_API_TOKEN', ''),
-        'timeout'   => env('PAWAPAY_TIMEOUT', 30),
+        'base_url'   => env('PAWAPAY_BASE_URL', 'https://api.pawapay.io'),
+        'api_token'  => env('PAWAPAY_API_TOKEN', ''),
+        'public_key' => str_replace('\n', "\n", env('PAWAPAY_PUBLIC_KEY', '')),
+        'timeout'    => env('PAWAPAY_TIMEOUT', 30),
     ],
 
 

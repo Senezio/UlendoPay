@@ -104,7 +104,7 @@ private function sendWithdrawalFailed(array $payload): void
 
     private function sendTransferCompleted(array $payload): void
     {
-        $transaction = Transaction::with(["sender", "recipient"])->findOrFail($payload["transaction_id"]);
+        $transaction = Transaction::with(["sender", "recipient"])->where("reference_number", $payload["reference"])->firstOrFail();
         
         $this->dispatch(
             phone:   $this->resolveSenderPhone($transaction->sender),

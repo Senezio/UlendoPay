@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\VerifiesWebhookSignature;
 use App\Models\Withdrawal;
-use App\Models\WebhookSignature;
 use App\Services\WithdrawalService;
 use App\Services\MtnMomoService;
 use Illuminate\Http\Request;
@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Log;
 
 class WithdrawalController extends Controller
 {
+    use VerifiesWebhookSignature;
+
     public function __construct(private readonly WithdrawalService $withdrawalService) {}
 
     public function operators(Request $request): JsonResponse
@@ -95,18 +97,16 @@ class WithdrawalController extends Controller
 
     /**
      * PawaPay payout webhook.
-     * Secured via HMAC-SHA256 signature on raw request body.
-     * Header: X-Pawapay-Signature
+     * Secured via RFC-9421 ECDSA P-256 SHA-256 signature.
+     * See VerifiesWebhookSignature trait for verification logic.
      */
     public function pawapayWebhook(Request $request): JsonResponse
     {
-        $signature = $request->header('X-Pawapay-Signature') ?? '';
-
         Log::info('[Withdrawal][PawaPay] Webhook received', [
-            'signature' => substr($signature, 0, 20) . '...',
+            'all_headers' => $request->headers->all(),
         ]);
 
-        if (!$this->verifyPawapaySignature($request->getContent(), $signature)) {
+        if (!$this->verifyPawapaySignature($request)) {
             Log::warning('[Withdrawal][PawaPay] Invalid signature — webhook rejected');
             return response()->json(['message' => 'Signature verification failed.'], 200);
         }
@@ -145,8 +145,8 @@ class WithdrawalController extends Controller
 
         try {
             // Verify by calling back to MTN — never trust the payload alone
-            $mtnMomo        = new MtnMomoService();
-            $verifiedStatus = $mtnMomo->getWithdrawalStatus($mtnReference);
+            $mtnMomo         = new MtnMomoService();
+            $verifiedStatus  = $mtnMomo->getWithdrawalStatus($mtnReference);
             $confirmedStatus = $verifiedStatus['status'] ?? null;
 
             Log::info('[Withdrawal][MTN] Status verified', [
@@ -160,8 +160,8 @@ class WithdrawalController extends Controller
             }
 
             // Replace payload status with verified status from MTN API
-            $verifiedPayload           = $payload;
-            $verifiedPayload['status'] = $confirmedStatus;
+            $verifiedPayload             = $payload;
+            $verifiedPayload['status']   = $confirmedStatus;
             $verifiedPayload['payoutId'] = $mtnReference;
 
             $this->withdrawalService->handleWebhook($verifiedPayload);
@@ -183,60 +183,5 @@ class WithdrawalController extends Controller
     public function webhook(Request $request): JsonResponse
     {
         return $this->pawapayWebhook($request);
-    }
-
-    private function verifyPawapaySignature(string $body, string $signature): bool
-    {
-        if (config('app.env') !== 'production') {
-            $webhookSecret = WebhookSignature::whereHas('partner', fn($q) =>
-                $q->where('code', 'PAWAPAY')->where('is_active', true)
-            )->where('is_active', true)->first();
-
-            if (!$webhookSecret) {
-                Log::info('[Withdrawal][PawaPay] No webhook secret configured — skipping verification in non-production');
-                return true;
-            }
-
-            try {
-                $secret   = decrypt($webhookSecret->secret_encrypted);
-                $expected = hash_hmac('sha256', $body, $secret);
-                $valid    = hash_equals($expected, $signature);
-
-                if (!$valid) {
-                    Log::warning('[Withdrawal][PawaPay] Signature mismatch in non-production — continuing anyway', [
-                        'expected' => substr($expected, 0, 20) . '...',
-                        'received' => substr($signature, 0, 20) . '...',
-                    ]);
-                }
-
-                return true;
-            } catch (\Throwable $e) {
-                Log::warning('[Withdrawal][PawaPay] Signature check error in non-production', [
-                    'error' => $e->getMessage(),
-                ]);
-                return true;
-            }
-        }
-
-        // Production — strict verification required
-        $webhookSecret = WebhookSignature::whereHas('partner', fn($q) =>
-            $q->where('code', 'PAWAPAY')->where('is_active', true)
-        )->where('is_active', true)->first();
-
-        if (!$webhookSecret) {
-            Log::error('[Withdrawal][PawaPay] No active webhook signature configured for PAWAPAY');
-            return false;
-        }
-
-        try {
-            $secret   = decrypt($webhookSecret->secret_encrypted);
-            $expected = hash_hmac('sha256', $body, $secret);
-            return hash_equals($expected, $signature);
-        } catch (\Throwable $e) {
-            Log::error('[Withdrawal][PawaPay] Signature verification error', [
-                'error' => $e->getMessage(),
-            ]);
-            return false;
-        }
     }
 }

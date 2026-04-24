@@ -35,9 +35,27 @@ class RecipientController extends Controller
             'bank_branch_code'    => 'nullable|string',
         ]);
 
-        // Sanitize text fields — strip any HTML/script tags
         if (isset($data['full_name'])) {
             $data['full_name'] = strip_tags($data['full_name']);
+        }
+
+        // Hash the phone number for transfer-in matching
+        $phone = $data['phone'] ?? $data['mobile_number'] ?? null;
+        if ($phone) {
+            $data['phone_hash'] = hash('sha256', $phone);
+        }
+
+        // Reuse existing recipient if same mobile_number already exists for this user
+        $existing = $request->user()->recipients()
+            ->where('mobile_number', $data['mobile_number'] ?? null)
+            ->first();
+
+        if ($existing) {
+            $existing->update($data);
+            return response()->json([
+                'message'   => 'Recipient updated.',
+                'recipient' => $existing->fresh(),
+            ], 200);
         }
 
         $recipient = $request->user()->recipients()->create($data);
@@ -75,6 +93,12 @@ class RecipientController extends Controller
             'bank_branch_code'    => 'sometimes|nullable|string',
         ]);
 
+        // Re-hash if phone is being updated
+        $phone = $data['phone'] ?? $data['mobile_number'] ?? null;
+        if ($phone) {
+            $data['phone_hash'] = hash('sha256', $phone);
+        }
+
         $recipient->update($data);
 
         return response()->json([
@@ -90,16 +114,11 @@ class RecipientController extends Controller
             ->where('is_active', true)
             ->findOrFail($id);
 
-        // Soft delete — never hard delete recipients
         $recipient->update(['is_active' => false]);
 
         return response()->json(['message' => 'Recipient removed.']);
     }
 
-
-    /**
-     * Predict mobile network for a given phone number via PawaPay.
-     */
     public function predictNetwork(Request $request): JsonResponse
     {
         $request->validate(['phone' => 'required|string|max:20']);

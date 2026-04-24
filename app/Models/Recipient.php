@@ -7,7 +7,7 @@ class Recipient extends Model
     protected $fillable = [
         'user_id','full_name','phone','country_code','payment_method',
         'mobile_network','mobile_number','bank_name',
-        'bank_account_number','bank_branch_code','is_verified','is_active'
+        'bank_account_number','bank_branch_code','is_verified','is_active','phone_hash'
     ];
     protected $hidden = [
         'full_name_encrypted',
