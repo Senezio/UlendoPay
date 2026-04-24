@@ -175,7 +175,6 @@ class WithdrawalService
                 return $withdrawal;
             });
 
-            // MtnMomoService returns the reference — this service owns the record
             $mtnReference = $mtnMomo->initiateWithdrawal(
                 user:              $user,
                 phoneNumber:       $phoneNumber,
@@ -329,7 +328,6 @@ class WithdrawalService
      */
     public function handleWebhook(array $payload): void
     {
-        // PawaPay sends payoutId; MTN sends externalId
         $providerReference = $payload['payoutId'] ?? $payload['externalId'] ?? null;
         $status            = $payload['status'] ?? null;
 
@@ -362,10 +360,47 @@ class WithdrawalService
         $failedStatuses    = ['FAILED', 'REJECTED', 'TIMED_OUT', 'EXPIRED'];
 
         if (in_array($status, $completedStatuses)) {
-            $withdrawal->update([
-                'status'       => 'completed',
-                'completed_at' => now(),
-            ]);
+            DB::transaction(function () use ($withdrawal) {
+                $currency = $withdrawal->currency_code;
+
+                $poolAccount = Account::where('code', "{$currency}-POOL")
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $equityAccount = Account::where('code', "{$currency}-EQUITY")
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                // Money was held in POOL at initiation.
+                // Now that disbursement is confirmed, release it out of the
+                // system: DEBIT POOL (reduces held funds) CREDIT EQUITY
+                // (records that real money has left the platform).
+                app(LedgerService::class)->post(
+                    reference:   "WDR-COMPLETE-{$withdrawal->reference}",
+                    type:        'adjustment',
+                    currency:    $currency,
+                    entries: [
+                        [
+                            'account_id'  => $poolAccount->id,
+                            'type'        => 'debit',
+                            'amount'      => $withdrawal->amount,
+                            'description' => "Withdrawal disbursed: {$withdrawal->reference}",
+                        ],
+                        [
+                            'account_id'  => $equityAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => $withdrawal->amount,
+                            'description' => "Withdrawal exited system: {$withdrawal->reference}",
+                        ],
+                    ],
+                    description: "Withdrawal completion: {$withdrawal->reference}"
+                );
+
+                $withdrawal->update([
+                    'status'       => 'completed',
+                    'completed_at' => now(),
+                ]);
+            });
 
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
@@ -528,8 +563,26 @@ class WithdrawalService
             'XOF' => 'SEN',
             'NGN' => 'NGA',
             'XAF' => 'CMR',
+            'ZAR' => 'ZAF',
             'CDF' => 'COD',
             default => throw new \InvalidArgumentException("Unsupported currency: {$currency}"),
+        };
+    }
+
+    private function friendlyRejectionMessage(string $code): string
+    {
+        return match($code) {
+            'AMOUNT_TOO_LARGE'      => 'The amount exceeds the maximum allowed. Please try a smaller amount.',
+            'AMOUNT_TOO_SMALL'      => 'The amount is below the minimum allowed.',
+            'INSUFFICIENT_FUNDS'    => 'Your mobile money account has insufficient funds.',
+            'INVALID_CORRESPONDENT' => 'This mobile network is not supported for this transaction.',
+            'INVALID_CURRENCY'      => 'The currency used is not supported.',
+            'INVALID_MSISDN'        => 'The phone number entered is invalid.',
+            'LIMIT_REACHED'         => 'You have reached your transaction limit.',
+            'PAYEE_REJECTED'        => 'The payment was declined by your mobile network.',
+            'SERVICE_UNAVAILABLE'   => 'The mobile payment service is temporarily unavailable.',
+            'TIMED_OUT'             => 'The payment request timed out. Please try again.',
+            default                 => 'Your payment could not be processed. Please try again or contact support.',
         };
     }
 }
