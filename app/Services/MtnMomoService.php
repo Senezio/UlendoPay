@@ -205,6 +205,10 @@ class MtnMomoService
     /**
      * Credit wallet after successful MTN MoMo collection.
      * Called from webhook handler in TopUpService.
+     *
+     * Accounting: EQUITY is debited (internal source of funds) and
+     * the user wallet is credited. The POOL is not touched here —
+     * it only moves when real money physically arrives/leaves via the provider.
      */
     public function creditWallet(TopUp $topUp): void
     {
@@ -216,7 +220,7 @@ class MtnMomoService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $systemAccount = Account::where('code', "{$topUp->currency_code}-POOL")
+            $systemAccount = Account::where('code', $topUp->currency_code . '-EQUITY')
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -262,6 +266,10 @@ class MtnMomoService
     /**
      * Refund wallet after failed MTN MoMo withdrawal.
      * Called from webhook handler in WithdrawalService.
+     *
+     * Accounting: POOL is debited (held funds released back) and
+     * the user wallet is credited. This is the exact reverse of
+     * the withdrawal initiation entry.
      */
     public function refundWallet(Withdrawal $withdrawal, string $reason): void
     {
@@ -273,7 +281,7 @@ class MtnMomoService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $systemAccount = Account::where('code', "{$withdrawal->currency_code}-POOL")
+            $systemAccount = Account::where('code', $withdrawal->currency_code . '-POOL')
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -284,13 +292,13 @@ class MtnMomoService
                 entries: [
                     [
                         'account_id'  => $systemAccount->id,
-                        'type'        => 'credit',
+                        'type'        => 'debit',
                         'amount'      => $withdrawal->amount,
                         'description' => "Withdrawal refund: {$withdrawal->reference}",
                     ],
                     [
                         'account_id'  => $userAccount->id,
-                        'type'        => 'debit',
+                        'type'        => 'credit',
                         'amount'      => $withdrawal->amount,
                         'description' => "Withdrawal refunded: {$withdrawal->reference}",
                     ],

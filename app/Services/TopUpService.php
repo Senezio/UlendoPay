@@ -331,8 +331,7 @@ class TopUpService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $systemAccount = Account::where('type', 'system')
-                ->where('currency_code', $currency)
+            $systemAccount = Account::where('code', $currency . '-EQUITY')
                 ->lockForUpdate()
                 ->firstOrFail();
 
