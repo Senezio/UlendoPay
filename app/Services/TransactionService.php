@@ -440,7 +440,11 @@ class TransactionService
      * Complete a transaction after partner confirms disbursement.
      * Called by the outbox worker.
      *
-     * Posts Group 2: Debit escrow → Credit partner account
+     * Posts Group 2: Debit escrow → Credit send-currency POOL
+     * The partner disburses from their own float in the receive currency.
+     * UlendoPay only needs to release escrow back into the liquidity pool
+     * on the send side. The PARTNER account is not used — it has no debit
+     * path and would accumulate indefinitely.
      */
     public function complete(Transaction $transaction, string $partnerReference): void
     {
@@ -452,11 +456,10 @@ class TransactionService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $escrowAccount  = Account::where('type', 'escrow')
+            $escrowAccount = Account::where('type', 'escrow')
                 ->where('currency_code', $transaction->send_currency)->firstOrFail();
-            $partnerAccount = Account::where('type', 'partner')
-                ->where('owner_id', $transaction->partner_id)
-                ->where('currency_code', $transaction->send_currency)->firstOrFail();
+            $poolAccount   = Account::where('code', "{$transaction->send_currency}-POOL")
+                ->firstOrFail();
 
             $escrowAmount = $transaction->send_amount
                 - $transaction->fee_amount
@@ -471,13 +474,13 @@ class TransactionService
                         'account_id'  => $escrowAccount->id,
                         'type'        => 'debit',
                         'amount'      => $escrowAmount,
-                        'description' => "Escrow release {$transaction->reference_number}",
+                        'description' => "Escrow release: {$transaction->reference_number}",
                     ],
                     [
-                        'account_id'  => $partnerAccount->id,
+                        'account_id'  => $poolAccount->id,
                         'type'        => 'credit',
                         'amount'      => $escrowAmount,
-                        'description' => "Partner settlement {$transaction->reference_number}",
+                        'description' => "Pool funded after disbursement: {$transaction->reference_number}",
                     ],
                 ]
             );
