@@ -250,7 +250,7 @@ private function sendWithdrawalFailed(array $payload): void
             Log::info("SMS sent [{$context}]", ["phone" => $phone]);
         } catch (\Throwable $e) {
             Log::error("SMS dispatch failed [{$context}]", ["error" => $e->getMessage()]);
-            throw $e;
+            // SMS failure must never block business logic
         }
     }
 
@@ -293,6 +293,16 @@ private function sendWithdrawalFailed(array $payload): void
             "UGA", "UG" => "+256",
             "RWA", "RW" => "+250",
             "SEN", "SN" => "+221",
+            "NGA", "NG" => "+234",
+            "CMR", "CM" => "+237",
+            "COD", "CD" => "+243",
+            "CIV", "CI" => "+225",
+            "BEN", "BJ" => "+229",
+            "BFA", "BF" => "+226",
+            "SLE", "SL" => "+232",
+            "COG", "CG" => "+242",
+            "GAB", "GA" => "+241",
+            "LSO", "LS" => "+266",
             default => throw new \RuntimeException("Unknown country code: {$countryCode}"),
         };
         return $dialCode . $phone;
