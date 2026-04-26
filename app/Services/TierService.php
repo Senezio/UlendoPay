@@ -36,7 +36,7 @@ class TierService
      * Convert a limit amount from the tier's limit_currency to the user's send currency.
      * Uses ZAR as the pivot currency via available exchange rates.
      */
-    private function convertLimit(float $amount, string $fromCurrency, string $toCurrency): float
+    public function convertLimit(float $amount, string $fromCurrency, string $toCurrency): float
     {
         if ($fromCurrency === $toCurrency) return $amount;
 

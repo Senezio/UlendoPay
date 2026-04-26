@@ -22,7 +22,7 @@ class FraudDetectionService
     // Thresholds
     const VELOCITY_MAX_TXN      = 3;
     const VELOCITY_WINDOW_MINS  = 10;
-    const DAILY_LIMIT           = 1000000;
+    // DAILY_LIMIT removed — now dynamic from user tier via TierService
     const UNUSUAL_HOUR_START    = 0;
     const UNUSUAL_HOUR_END      = 5;
     const RECIPIENT_SENDER_MAX  = 5;
@@ -58,17 +58,29 @@ class FraudDetectionService
             $totalScore += self::SCORE_VELOCITY;
         }
 
-        // Rule 2: Daily limit
+        // Rule 2: Daily limit — dynamic from user tier
         $dailyTotal = Transaction::where('sender_id', $sender->id)
             ->where('send_currency', $sendCurrency)
             ->whereDate('created_at', $now->toDateString())
             ->whereNotIn('status', ['refunded', 'failed'])
             ->sum('send_amount');
 
-        if (($dailyTotal + $sendAmount) > self::DAILY_LIMIT) {
+        try {
+            $tierService = app(TierService::class);
+            $tierModel   = $tierService->getTier($sender);
+            $dailyLimit  = $tierService->convertLimit(
+                (float) $tierModel->daily_limit,
+                $tierModel->limit_currency ?? 'USD',
+                $sendCurrency
+            );
+        } catch (\Throwable $e) {
+            $dailyLimit = PHP_INT_MAX; // fallback: no limit if tier not found
+        }
+
+        if (($dailyTotal + $sendAmount) > $dailyLimit) {
             $triggeredRules[] = [
                 'rule'    => 'daily_limit',
-                'detail'  => "Daily total would reach " . ($dailyTotal + $sendAmount) . " {$sendCurrency}, limit is " . self::DAILY_LIMIT,
+                'detail'  => "Daily total would reach " . number_format($dailyTotal + $sendAmount, 2) . " {$sendCurrency}, tier limit is " . number_format($dailyLimit, 2),
                 'score'   => self::SCORE_DAILY_LIMIT,
             ];
             $totalScore += self::SCORE_DAILY_LIMIT;
