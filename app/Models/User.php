@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\Hash;
 #[Fillable([
     'name', 'email', 'password', 'pin',
     'phone_encrypted', 'phone_hash', 'country_code',
-    'kyc_status', 'status', 'kyc_verified_at',
+    'kyc_status', 'status', 'kyc_verified_at', 'tier',
+    'referral_code', 'referred_by', 'referral_discount_percent',
     'phone_verified_at', 'last_login_at', 'last_login_method',
 ])]
 #[Hidden(['password', 'remember_token', 'phone_encrypted', 'phone_hash', 'pin'])]

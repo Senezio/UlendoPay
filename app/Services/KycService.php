@@ -106,10 +106,13 @@ class KycService
         ]);
 
         $requestedTier = $record->requested_tier ?? 'verified';
-        $record->user->update(['kyc_status' => 'verified', 'tier' => $requestedTier]);
+        $user = $record->user;
+        $user->kyc_status = 'verified';
+        $user->tier       = $requestedTier;
+        $user->save();
 
-        // Sync tier based on requested tier
-        app(\App\Services\TierService::class)->syncTier($record->user->fresh(), $requestedTier);
+        // Sync tier with fresh instance to avoid stale cache
+        app(\App\Services\TierService::class)->syncTier(\App\Models\User::find($user->id), $requestedTier);
 
         // Notify user via SMS
         app(SmsService::class)->send([
