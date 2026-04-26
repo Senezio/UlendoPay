@@ -17,10 +17,10 @@ Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::post('/register',        [AuthController::class, 'register']);
         Route::post('/verify-phone',    [AuthController::class, 'verifyPhone']);
-        Route::post('/login',           [AuthController::class, 'login']);
-        Route::post('/verify-login',    [AuthController::class, 'verifyLogin']);
+        Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/verify-login', [AuthController::class, 'verifyLogin']);
         Route::post('/verify-totp',     [AuthController::class, 'verifyTotp']);
-        Route::post('/forgot-pin',      [AuthController::class, 'forgotPin']);
+        Route::post('/forgot-pin', [AuthController::class, 'forgotPin']);
         Route::post('/reset-pin',       [AuthController::class, 'resetPin']);
         Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
         Route::post('/reset-password',  [AuthController::class, 'resetPassword']);
@@ -59,7 +59,7 @@ Route::prefix('v1')->group(function () {
         // Auth
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me',      [AuthController::class, 'me']);
-        Route::get('/users/lookup',  [AuthController::class, 'lookup']);
+        Route::get('/users/lookup',  [AuthController::class, 'lookup'])->middleware('throttle:lookup');
 
         // Transfer tiers
         Route::get('/tier', [\App\Http\Controllers\Api\TierController::class, 'show']);
@@ -84,6 +84,7 @@ Route::prefix('v1')->group(function () {
 
         // Wallets
         Route::get('/wallets',            [WalletController::class, 'index']);
+        Route::get('/statement',           [\App\Http\Controllers\Api\StatementController::class, 'download']);
         Route::get('/wallets/{currency}', [WalletController::class, 'show']);
 
         // Top-up
@@ -121,6 +122,7 @@ Route::prefix('v1')->group(function () {
             // KYC
             Route::get('/settings',          [AdminController::class, 'settings']);
             Route::get('/kyc/queue',         [AdminController::class, 'kycQueue']);
+            Route::get('/kyc/verified',      [AdminController::class, 'kycVerified']);
             Route::get('/kyc/{id}',          [AdminController::class, 'kycShow']);
             Route::post('/kyc/{id}/approve', [AdminController::class, 'kycApprove'])
                 ->middleware('admin:super_admin,kyc_reviewer');

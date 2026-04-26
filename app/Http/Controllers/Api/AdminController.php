@@ -109,6 +109,17 @@ class AdminController extends Controller
         ]);
     }
 
+
+    public function kycVerified(Request $request): JsonResponse
+    {
+        $records = KycRecord::with('user:id,name,email,phone_encrypted,phone_hash,country_code,tier,kyc_status,created_at')
+            ->whereIn('status', ['approved', 'verified'])
+            ->latest('updated_at')
+            ->paginate(50);
+
+        return response()->json($records);
+    }
+
     public function kycApprove(Request $request, int $id): JsonResponse
     {
         $record = KycRecord::findOrFail($id);
@@ -993,7 +1004,6 @@ class AdminController extends Controller
             'Reference'       => $t->reference_number,
             'Date'            => $t->created_at->format('Y-m-d H:i'),
             'Sender'          => $t->sender?->name,
-            'Sender Email'    => $t->sender?->email,
             'Recipient'       => $t->recipient?->full_name,
             'Recipient Phone' => $t->recipient?->mobile_number,
             'Send Amount'     => $t->send_amount,
@@ -1049,100 +1059,91 @@ class AdminController extends Controller
 
             $tmpFile = tempnam(sys_get_temp_dir(), 'ulendo_') . '.xlsx';
             $writer->save($tmpFile);
-            $binary = file_get_contents($tmpFile);
-            unlink($tmpFile);
 
-            return response($binary, 200, [
-                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => "attachment; filename=\"{$filename}.xlsx\"",
-                'Content-Length'      => strlen($binary),
-                'Cache-Control'       => 'no-cache, no-store',
-            ]);
-        }
-
-        // PDF using DomPDF — Professional Template
-        $adminName   = $request->user()?->name ?? 'Administrator';
-        $logoPath    = public_path('logo.png');
-        $logoData    = file_exists($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
-        $logoImg     = $logoData ? '<img src="data:image/png;base64,' . $logoData . '" style="height:48px;width:auto;" />' : '<strong style="font-size:18px;color:#e85d04;">UlendoPay</strong>';
-
-        $totalRows = $rows->count();
-
-        $html  = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
-        $html .= '<style>';
-        $html .= '* { box-sizing: border-box; margin: 0; padding: 0; }';
-        $html .= 'body { font-family: Arial, sans-serif; font-size: 8.5px; color: #1a1a1a; background: #fff; }';
-        $html .= '.header { display: table; width: 100%; border-bottom: 3px solid #e85d04; padding-bottom: 12px; margin-bottom: 12px; }';
-        $html .= '.header-left { display: table-cell; vertical-align: middle; width: 50%; }';
-        $html .= '.header-right { display: table-cell; vertical-align: middle; width: 50%; text-align: right; font-size: 7.5px; color: #555; line-height: 1.6; }';
-        $html .= '.report-title { font-size: 15px; font-weight: bold; color: #1a1a1a; margin-top: 6px; }';
-        $html .= '.report-subtitle { font-size: 8px; color: #888; margin-top: 2px; }';
-
-        $html .= 'table.data { width: 100%; border-collapse: collapse; margin-top: 4px; }';
-        $html .= 'table.data thead tr { background: #e85d04; color: #fff; }';
-        $html .= 'table.data th { padding: 5px 6px; text-align: left; font-size: 7.5px; font-weight: bold; letter-spacing: 0.03em; border: none; }';
-        $html .= 'table.data td { padding: 4px 6px; font-size: 7.5px; border-bottom: 1px solid #f0f0f0; color: #333; }';
-        $html .= 'table.data tbody tr:nth-child(even) td { background: #fff7f0; }';
-        $html .= 'table.data tbody tr:nth-child(odd) td { background: #ffffff; }';
-        $html .= '.status-completed { color: #16a34a; font-weight: bold; }';
-        $html .= '.status-failed { color: #dc2626; font-weight: bold; }';
-        $html .= '.status-processing, .status-retrying, .status-escrowed { color: #d97706; font-weight: bold; }';
-        $html .= '.status-refunded { color: #6b7280; font-weight: bold; }';
-        $html .= '.footer { margin-top: 14px; border-top: 1px solid #e5e5e5; padding-top: 8px; display: table; width: 100%; }';
-        $html .= '.footer-left { display: table-cell; font-size: 7px; color: #aaa; }';
-        $html .= '.footer-right { display: table-cell; text-align: right; font-size: 7px; color: #aaa; }';
-        $html .= '.summary { display: table; width: 100%; margin-bottom: 10px; }';
-        $html .= '.summary-box { display: table-cell; width: 25%; text-align: center; padding: 6px; border: 1px solid #f0f0f0; border-radius: 4px; }';
-        $html .= '.summary-box .num { font-size: 14px; font-weight: bold; color: #e85d04; }';
-        $html .= '.summary-box .lbl { font-size: 7px; color: #888; margin-top: 2px; }';
-        $html .= '</style></head><body>';
-
-        // Header
-        $html .= '<div class="header">';
-        $html .= '<div class="header-left">' . $logoImg . '<div class="report-title">Transaction Export Report</div><div class="report-subtitle">Ulendo Technologies Limited</div></div>';
-        $html .= '<div class="header-right">';
-        $html .= 'Ulendo Technologies Limited<br>';
-        $html .= 'P.O. Box 3245, Lilongwe 3, Malawi<br>';
-        $html .= 'support@ulendopay.com<br>';
-        $html .= 'www.ulendopay.com';
-        $html .= '</div></div>';
-
-        // Generated by line under header
-        $html .= '<div style="font-size:7.5px;color:#888;margin-bottom:10px;">Generated by <strong>' . htmlspecialchars($adminName) . '</strong> &nbsp;|&nbsp; ' . now()->format('d M Y, H:i') . '</div>';
-
-        // Summary boxes
-        $completed = $rows->where('Status', 'completed')->count();
-        $failed    = $rows->where('Status', 'failed')->count();
-        $html .= '<div class="summary">';
-        $html .= '<div class="summary-box"><div class="num">' . $totalRows . '</div><div class="lbl">Total Transactions</div></div>';
-        $html .= '<div class="summary-box"><div class="num" style="color:#16a34a;">' . $completed . '</div><div class="lbl">Completed</div></div>';
-        $html .= '<div class="summary-box"><div class="num" style="color:#dc2626;">' . $failed . '</div><div class="lbl">Failed</div></div>';
-        $html .= '<div class="summary-box"><div class="num" style="color:#6b7280;">' . ($totalRows - $completed - $failed) . '</div><div class="lbl">Other</div></div>';
-        $html .= '</div>';
-
-        // Table
-        $html .= '<table class="data"><thead><tr>';
-        foreach (array_keys($rows->first() ?? []) as $header) {
-            $html .= '<th>' . htmlspecialchars($header) . '</th>';
-        }
-        $html .= '</tr></thead><tbody>';
-        foreach ($rows as $row) {
-            $html .= '<tr>';
-            foreach ($row as $key => $val) {
-                $class = $key === 'Status' ? 'status-' . strtolower((string)$val) : '';
-                $html .= '<td class="' . $class . '">' . htmlspecialchars((string)$val) . '</td>';
+            while (ob_get_level()) {
+                ob_end_clean();
             }
-            $html .= '</tr>';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $filename . '.xlsx"');
+            header('Content-Length: ' . filesize($tmpFile));
+            header('Cache-Control: no-cache, no-store');
+            header('Pragma: no-cache');
+
+            readfile($tmpFile);
+            unlink($tmpFile);
+            exit;
         }
-        $html .= '</tbody></table>';
 
-        // Footer
-        $html .= '<div class="footer">';
-        $html .= '<div class="footer-left">CONFIDENTIAL — For internal use only. Generated by UlendoPay Admin System.</div>';
-        $html .= '<div class="footer-right">© ' . now()->year . ' Ulendo Technologies Limited. All rights reserved.</div>';
-        $html .= '</div>';
+        // PDF using DomPDF — Clean Minimal Template
+        $adminName = $request->user()?->name ?? "Administrator";
+        $logoPath  = public_path("logo.png");
+        $logoData  = file_exists($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
+        $logoImg   = $logoData
+            ? "<img src=\"data:image/png;base64," . $logoData . "\" style=\"height:48px;width:auto;display:block;\" />"
+            : "<div style=\"font-size:22px;font-weight:900;color:#1a1a1a;\">Ulendo<span style=\"color:#e85d04;\">Pay</span></div>";
 
-        $html .= '</body></html>';
+        $html  = "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">";
+        $html .= "<style>";
+        $html .= "@page { margin: 20mm; size: A4 landscape; }";
+        $html .= "* { box-sizing: border-box; margin: 0; padding: 0; }";
+        $html .= "body { font-family: Arial, sans-serif; font-size: 9px; color: #1a1a1a; background: #fff; margin: 0; padding: 0; }";
+        $html .= "table { border-collapse: collapse; }";
+        $html .= "table.data { width: 100%; border-top: 2px solid #1a1a1a; border-bottom: 1px solid #ccc; margin-top: 6px; }";
+        $html .= "table.data thead tr { border-bottom: 1px solid #1a1a1a; }";
+        $html .= "table.data th { padding: 7px 8px; text-align: left; font-size: 9px; font-weight: 700; }";
+        $html .= "table.data td { padding: 5px 8px; font-size: 9px; color: #333; border-bottom: 1px solid #f0f0f0; }";
+        $html .= "table.data tbody tr:nth-child(even) td { background: #f9f9f9; }";
+        $html .= "table.data tbody tr:nth-child(odd) td { background: #ffffff; }";
+        $html .= "</style></head><body>";
+
+        $html .= "<table width=\"100%\" style=\"margin-bottom:24px;\">";
+        $html .= "<tr>";
+        $html .= "<td width=\"50%\" style=\"vertical-align:top;\">" . $logoImg;
+        $html .= "<div style=\"margin-top:8px;font-size:9px;color:#444;line-height:1.8;\">Ulendo Technologies Limited<br>P.O. Box 37894, Lilongwe 3, Malawi<br>www.ulendopay.com<br>support@ulendopay.com</div>";
+        $html .= "</td>";
+        $html .= "<td width=\"50%\" style=\"vertical-align:top;text-align:right;\">";
+        $html .= "<div style=\"font-size:16px;font-weight:700;color:#1a1a1a;letter-spacing:0.04em;text-transform:uppercase;\">Transaction Export Report</div>";
+        $html .= "</td></tr></table>";
+
+        $html .= "<hr style=\"border:none;border-top:1px solid #ccc;margin-bottom:16px;\" />";
+
+        $html .= "<table width=\"100%\" style=\"margin-bottom:16px;\">";
+        $html .= "<tr><td style=\"font-size:9px;color:#555;width:120px;padding:3px 0;\">Generated By:</td>";
+        $html .= "<td style=\"font-size:9px;color:#1a1a1a;font-weight:600;\">" . htmlspecialchars($adminName) . "</td>";
+        $html .= "<td style=\"text-align:right;font-size:9px;color:#555;\">Page 1 of 1</td></tr>";
+        $html .= "<tr><td style=\"font-size:9px;color:#555;padding:3px 0;\">Report Date:</td>";
+        $html .= "<td style=\"font-size:9px;color:#1a1a1a;\">" . now()->format("d/m/Y H:i") . "</td><td></td></tr>";
+        $html .= "<tr><td style=\"font-size:9px;color:#555;padding:3px 0;\">Total Records:</td>";
+        $html .= "<td style=\"font-size:9px;color:#1a1a1a;font-weight:600;\">" . $rows->count() . "</td><td></td></tr>";
+        $html .= "</table>";
+
+        $html .= "<hr style=\"border:none;border-top:1px solid #ccc;margin-bottom:16px;\" />";
+
+        $html .= "<div style=\"font-size:11px;font-weight:700;color:#1a1a1a;margin-bottom:6px;\">Transactions</div>";
+
+        $html .= "<table class=\"data\"><thead><tr>";
+        foreach (array_keys($rows->first() ?? []) as $header) {
+            $html .= "<th>" . htmlspecialchars($header) . "</th>";
+        }
+        $html .= "</tr></thead><tbody>";
+        foreach ($rows as $row) {
+            $html .= "<tr>";
+            foreach ($row as $val) {
+                $html .= "<td>" . htmlspecialchars((string)$val) . "</td>";
+            }
+            $html .= "</tr>";
+        }
+        $html .= "<tr><td colspan=\"" . count($rows->first() ?? []) . "\" style=\"padding:8px;font-size:9px;color:#999;text-align:center;border-top:1px solid #e0e0e0;\">--- End of Transactions ---</td></tr>";
+        $html .= "</tbody></table>";
+
+        $html .= "<div style=\"margin-top:40px;border-top:1px solid #ccc;padding-top:10px;\">";
+        $html .= "<table width=\"100%\"><tr>";
+        $html .= "<td style=\"font-size:8px;color:#999;\">Ulendo Technologies Limited &middot; P.O. Box 37894, Lilongwe 3, Malawi<br>This is a system-generated document. UlendoPay will NEVER ask for your PIN or password.</td>";
+        $html .= "<td style=\"font-size:8px;color:#999;text-align:right;\">&copy; " . now()->year . " Ulendo Technologies Limited. Confidential.</td>";
+        $html .= "</tr></table></div>";
+
+        $html .= "</body></html>";
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)
             ->setPaper('a4', 'landscape');
