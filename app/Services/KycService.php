@@ -185,7 +185,7 @@ class KycService
     /**
      * Generate a temporary signed URL for viewing a KYC document.
      */
-    public function getSecureUrl(KycRecord $record): string
+    public function getSecureUrl(KycRecord $record, ?int $requesterId = null): string
     {
         if (!Storage::disk('kyc')->exists($record->file_path)) {
             throw new \RuntimeException(
@@ -197,6 +197,7 @@ class KycService
             'id'    => $record->id,
             'token' => encrypt([
                 'record_id'  => $record->id,
+                'requester_id' => $requesterId,
                 'expires_at' => now()->addMinutes(5)->timestamp,
             ]),
         ]);

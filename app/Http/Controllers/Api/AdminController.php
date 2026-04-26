@@ -87,7 +87,7 @@ class AdminController extends Controller
         $record = KycRecord::with('user')->findOrFail($id);
 
         try {
-            $documentUrl = $this->kycService->getSecureUrl($record);
+            $documentUrl = $this->kycService->getSecureUrl($record, $request->user()->id);
         } catch (\Throwable $e) {
             $documentUrl = null;
         }

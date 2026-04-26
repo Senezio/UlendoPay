@@ -79,6 +79,17 @@ class KycController extends Controller
 
         $record = KycRecord::findOrFail($id);
 
+        // Verify requester is the document owner or an admin
+        $requesterId = $payload['requester_id'] ?? null;
+        if ($requesterId !== null) {
+            $requester = \App\Models\User::find($requesterId);
+            $isOwner   = $record->user_id === $requesterId;
+            $isAdmin   = in_array($requester?->role, ['super_admin', 'kyc_reviewer', 'admin']);
+            if (!$isOwner && !$isAdmin) {
+                return response()->json(['message' => 'Access denied.'], 403);
+            }
+        }
+
         if (!Storage::disk('kyc')->exists($record->file_path)) {
             return response()->json(['message' => 'Document not found.'], 404);
         }
