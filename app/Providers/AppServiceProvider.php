@@ -28,5 +28,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('kyc', function (Request $request) {
             return Limit::perHour(3)->by($request->user()?->id ?: $request->ip());
         });
+
+        RateLimiter::for('otp', function (Request $request) {
+            return Limit::perMinutes(10, 3)->by($request->ip());
+        });
     }
 }

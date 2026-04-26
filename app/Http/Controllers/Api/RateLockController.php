@@ -64,6 +64,9 @@ class RateLockController extends Controller
             $feeFlat    = $corridor->fee_flat;
         }
 
+        // Check tier limits before locking rate
+        app(\App\Services\TierService::class)->checkLimits($request->user(), (float) $data["send_amount"], $from);
+
         // Cancel any existing active lock for this user and corridor
         RateLock::where('user_id', $request->user()->id)
             ->where('from_currency', $from)

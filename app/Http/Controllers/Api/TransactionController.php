@@ -27,6 +27,13 @@ class TransactionController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
+        // Ensure send_amount matches the rate lock to prevent tampering
+        if (abs((float) $data['send_amount'] - (float) $rateLock->send_amount) > 0.01) {
+            return response()->json([
+                'message' => 'Send amount does not match the locked rate. Please get a new quote.',
+            ], 422);
+        }
+
         $recipient = Recipient::where('id', $data['recipient_id'])
             ->where('user_id', $request->user()->id)
             ->where('is_active', true)
@@ -69,7 +76,7 @@ class TransactionController extends Controller
             ->map(fn($t) => $this->formatTransaction($t, 'received'));
 
         // Merge and sort by created_at descending, then paginate manually
-        $all = $sent->merge($received)
+        $all = collect($sent->all())->merge(collect($received->all()))
             ->sortByDesc('created_at')
             ->values();
 

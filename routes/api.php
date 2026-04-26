@@ -15,14 +15,14 @@ Route::prefix('v1')->group(function () {
 
     // ── Public auth routes ───────────────────────────────────────────────────
     Route::prefix('auth')->group(function () {
-        Route::post('/register',        [AuthController::class, 'register']);
+        Route::post('/register',        [AuthController::class, 'register'])->middleware('throttle:otp');
         Route::post('/verify-phone',    [AuthController::class, 'verifyPhone']);
         Route::post('/login', [AuthController::class, 'login']);
         Route::post('/verify-login', [AuthController::class, 'verifyLogin']);
         Route::post('/verify-totp',     [AuthController::class, 'verifyTotp']);
-        Route::post('/forgot-pin', [AuthController::class, 'forgotPin']);
+        Route::post('/forgot-pin', [AuthController::class, 'forgotPin'])->middleware('throttle:otp');
         Route::post('/reset-pin',       [AuthController::class, 'resetPin']);
-        Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+        Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:otp');
         Route::post('/reset-password',  [AuthController::class, 'resetPassword']);
     });
 
