@@ -80,7 +80,7 @@ Route::prefix('v1')->group(function () {
 
         // KYC
         Route::get('/kyc/status',        [KycController::class, 'status']);
-        Route::post('/kyc/submit',       [KycController::class, 'submit']);
+        Route::post('/kyc/submit',       [KycController::class, 'submit'])->middleware('throttle:kyc');
 
         // Wallets
         Route::get('/wallets',            [WalletController::class, 'index']);

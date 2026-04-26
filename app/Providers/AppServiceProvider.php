@@ -18,7 +18,15 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('auth', function (Request $request) {
-            return Limit::perMinute(5)->by($request->ip());
+            return Limit::perMinute(10)->by($request->ip());
+        });
+
+        RateLimiter::for('lookup', function (Request $request) {
+            return Limit::perMinute(20)->by($request->user()?->id ?: $request->ip());
+        });
+
+        RateLimiter::for('kyc', function (Request $request) {
+            return Limit::perHour(3)->by($request->user()?->id ?: $request->ip());
         });
     }
 }
