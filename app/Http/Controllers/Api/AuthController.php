@@ -82,8 +82,11 @@ class AuthController extends Controller
             ], 201);
         }
 
-        // Production: Send OTP and require manual verification
+        // Production: Send OTP via SMS always, plus email if provided (saves SMS costs)
         $this->otpService->send($user, 'phone_verification');
+        if ($user->email) {
+            $this->otpService->send($user, 'phone_verification', 'email');
+        }
 
         return response()->json([
             'message'   => 'Registration successful. Please verify your phone number.',
@@ -315,7 +318,12 @@ class AuthController extends Controller
 
         // Always return same response — never reveal if phone exists
         if ($user && $user->isActive() && $user->isPhoneVerified()) {
-            $this->otpService->send($user, 'pin_reset');
+            if ($user->email) {
+                // Send via email to save SMS costs
+                $this->otpService->send($user, 'pin_reset', 'email');
+            } else {
+                $this->otpService->send($user, 'pin_reset');
+            }
         }
 
         return response()->json([
@@ -726,6 +734,27 @@ class AuthController extends Controller
         }
     }
 
+
+
+    public function resendOtp(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'type'    => 'required|in:login_2fa,phone_verification',
+        ]);
+
+        $user = User::findOrFail($data['user_id']);
+
+        $this->throttle("resend_otp:{$data['user_id']}", 3, 10);
+
+        $channel = $user->email ? 'email' : 'sms';
+        $this->otpService->send($user, $data['type'], $channel);
+
+        return response()->json([
+            'message' => 'Verification code resent via ' . $channel . '.',
+            'channel' => $channel,
+        ]);
+    }
 
     public function verifyPin(Request $request): JsonResponse
     {

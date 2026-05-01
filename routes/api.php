@@ -24,6 +24,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/reset-pin',       [AuthController::class, 'resetPin']);
         Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:otp');
         Route::post('/reset-password',  [AuthController::class, 'resetPassword']);
+        Route::post('/resend-otp',       [AuthController::class, 'resendOtp']);
     });
 
     // ── Webhooks — public, secured via per-provider verification ────────────
@@ -42,8 +43,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/withdraw/webhook/pawapay',[WithdrawalController::class, 'pawapayWebhook']);
     Route::post('/withdraw/webhook/mtn',    [WithdrawalController::class, 'mtnWebhook']);
 
-    // Legacy webhook routes — kept for simulator backward compatibility
-    // TODO: Update ulendopay_sim.py to use /pawapay endpoints, then remove these
+    // Legacy webhook routes — kept for backward compatibility with older integrations
     Route::post('/topup/webhook',    [TopUpController::class, 'webhook']);
     Route::post('/withdraw/webhook', [WithdrawalController::class, 'webhook']);
 
