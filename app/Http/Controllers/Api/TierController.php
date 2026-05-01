@@ -102,7 +102,7 @@ class TierController extends Controller
 
         return response()->json([
             'referral_code'    => $code,
-            'referral_link'    => url('/register?ref=' . $code),
+            'referral_link'    => config('app.url') . '/register?ref=' . $code,
             'total_referrals'  => $referrals->count(),
             'qualified'        => $referrals->where('status', 'qualified')->count(),
             'your_discount'    => (float) $user->referral_discount_percent,
