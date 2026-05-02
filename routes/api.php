@@ -27,6 +27,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/resend-otp',       [AuthController::class, 'resendOtp']);
     });
 
+    Route::post('/contact', [AppHttpControllersApiPublicController::class, 'contact'])->middleware('throttle:6,1');
+    Route::post("/contact", [\App\Http\Controllers\Api\PublicController::class, "contact"])->middleware("throttle:6,1");
+
     // ── Webhooks — public, secured via per-provider verification ────────────
     //
     // PawaPay: HMAC-SHA256 signature on raw body (X-Pawapay-Signature header)
@@ -116,6 +119,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('admin')->middleware('admin')->group(function () {
 
             Route::get('/stats',     [AdminController::class, 'stats']);
+            Route::get('/audit-log',  [AdminController::class, 'adminAuditLog']);
             Route::get('/analytics', [AdminController::class, 'analytics']);
             Route::get('/accounts',  [AdminController::class, 'accounts']);
 
