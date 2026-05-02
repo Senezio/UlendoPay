@@ -13,7 +13,8 @@ class SystemAccountSeeder extends Seeder
      * Add new currencies here — accounts will be provisioned automatically.
      */
     private array $currencies = [
-        'MWK', 'KES', 'TZS', 'ZMW', 'ZAR', 'MZN', 'BWP', 'ETB', 'MGA'
+        'MWK', 'KES', 'TZS', 'ZMW', 'ZAR', 'MZN', 'BWP', 'ETB', 'MGA',
+        'GHS', 'RWF', 'UGX', 'XAF', 'XOF'
     ];
 
     public function run(): void
