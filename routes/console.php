@@ -63,6 +63,15 @@ Schedule::command('withdrawals:recover')
         Log::error('[scheduler] withdrawals:recover FAILED');
     });
 
+// ── Expire stuck top-ups ─────────────────────────────────────────────────────
+// Runs every 5 minutes — marks pending top-ups as failed if no webhook after 3 mins
+Schedule::command('topups:expire')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onFailure(function () {
+        Log::error('[scheduler] topups:expire FAILED');
+    });
+
 // ── Expire unclaimed pending transfers ───────────────────────────────────────
 // Runs every hour — refunds transfers not claimed within 48 hours
 Schedule::command('claims:expire')
