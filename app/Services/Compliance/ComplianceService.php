@@ -8,6 +8,7 @@ use App\Models\SanctionsEntry;
 use App\Models\PepEntry;
 use App\Models\ComplianceScreen;
 use App\Models\ComplianceAlert;
+use App\Models\KycRecord;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -93,8 +94,11 @@ class ComplianceService
             }
         }
 
+        // Check document number against sanctions identifiers
+        $docMatch = $bestEntry ? $this->checkDocumentMatch($user, $bestEntry->metadata ?? []) : false;
+
         // Use raw name score for decision, not boosted combined score
-        $result = $this->determineSanctionsResult($nameScore ?? $bestScore, $aliasMatch, $countryMatch, $bestEntry, $dobMatch ?? null);
+        $result = $this->determineSanctionsResult($bestNameScore ?? $bestScore, $aliasMatch, $countryMatch, $bestEntry, $dobMatch ?? null, $docMatch);
 
         return DB::transaction(function () use ($user, $inputName, $trigger, $bestScore, $bestEntry, $aliasMatch, $countryMatch, $result) {
             $screen = $this->recordScreen($user, 'sanctions', $inputName, $bestScore, $bestEntry?->id, null, $result, $trigger, $aliasMatch, $countryMatch, $bestEntry?->name);
@@ -218,39 +222,62 @@ class ComplianceService
         ];
     }
 
-    private function determineSanctionsResult(int $score, bool $aliasMatch, bool $countryMatch, ?SanctionsEntry $entry, ?bool $dobMatch = null): string
+    private function determineSanctionsResult(int $score, bool $aliasMatch, bool $countryMatch, ?SanctionsEntry $entry, ?bool $dobMatch = null, bool $docMatch = false): string
     {
         if ($entry === null) return 'clear';
 
-        // Never block if DOB explicitly conflicts
+        // Document number match is the strongest signal — block immediately
+        // A matching government ID number is definitive proof of identity
+        if ($docMatch) return 'blocked';
+
+        // DOB conflict — this is a different person sharing the same name
+        // Protect innocent people, downgrade to clear
         if ($dobMatch === false) return 'clear';
 
-        // Hard block only with strong multi-signal confirmation
-        if (
-            $score >= 90 &&
-            (
-                $aliasMatch === true ||
-                $dobMatch === true
-            )
-        ) {
-            return 'blocked';
-        }
+        // DOB match + name score >= 60 — two independent signals confirm identity
+        if ($dobMatch === true && $score >= 60) return 'blocked';
 
-        // Strong name + DOB + country
-        if (
-            $score >= 85 &&
-            $dobMatch === true &&
-            $countryMatch === true
-        ) {
-            return 'blocked';
-        }
-
-        // Everything else above threshold is manual review
-        if ($score >= 60) {
-            return 'flagged';
-        }
+        // Name only — never auto-block regardless of score
+        // Common names like "Violet Banda" must never auto-block
+        // A compliance officer must confirm before any enforcement action
+        if ($score >= 60) return 'flagged';
 
         return 'clear';
+    }
+
+    /**
+     * Check if the user's KYC document number matches any identifier
+     * in the sanctions entry metadata. Returns true if a match is found.
+     */
+    private function checkDocumentMatch(User $user, array $entryMetadata): bool
+    {
+        // Get the user's most recent approved KYC document number
+        $kycRecord = KycRecord::where('user_id', $user->id)
+            ->where('status', 'approved')
+            ->whereNotNull('document_number')
+            ->latest()
+            ->first();
+
+        if (!$kycRecord || !$kycRecord->document_number) {
+            return false;
+        }
+
+        $userDocNumber = strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $kycRecord->document_number));
+
+        if (empty($userDocNumber)) {
+            return false;
+        }
+
+        $identifiers = $entryMetadata['identifiers'] ?? [];
+
+        foreach ($identifiers as $identifier) {
+            $normalized = strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $identifier));
+            if ($normalized === $userDocNumber) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function suspendUser(User $user): void

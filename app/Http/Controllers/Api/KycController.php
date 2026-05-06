@@ -30,11 +30,19 @@ class KycController extends Controller
 
     public function submit(Request $request): JsonResponse
     {
+        // Document number is required for identity documents
+        // Bank statements and utility bills don't have a document number
+        $identityDocTypes = ['passport', 'national_id', 'drivers_license', 'voters_card'];
+        $docType          = $request->input('document_type');
+        $docNumberRule    = in_array($docType, $identityDocTypes)
+            ? 'required|string|max:50'
+            : 'nullable|string|max:50';
+
         $data = $request->validate([
             'document_type'   => 'required|in:passport,national_id,drivers_license,utility_bill,voters_card,bank_statement',
-            'document_number' => 'nullable|string|max:50',
-            'date_of_birth'   => 'nullable|date|before:today|after:1900-01-01',
-            'gender'          => 'nullable|in:male,female,other',
+            'document_number' => $docNumberRule,
+            'date_of_birth'   => 'required_if:document_type,passport,national_id,drivers_license,voters_card|nullable|date|before:today|after:1900-01-01',
+            'gender'          => 'required_if:document_type,passport,national_id,drivers_license,voters_card|nullable|in:male,female,other',
             'document'        => 'required|file|mimes:jpeg,png,webp,pdf|max:15360',
             'requested_tier'  => 'nullable|in:basic,verified',
         ]);
@@ -47,6 +55,8 @@ class KycController extends Controller
                 file:           $request->file('document'),
                 ipAddress:      $request->ip(),
                 requestedTier:  $data['requested_tier'] ?? null,
+                dateOfBirth:    $data['date_of_birth'] ?? null,
+                gender:         $data['gender'] ?? null,
             );
 
             return response()->json([
@@ -117,11 +127,13 @@ class KycController extends Controller
             'id'              => $record->id,
             'document_type'   => $record->document_type,
             'document_number' => $record->document_number,
+            'date_of_birth'   => $record->date_of_birth,
+            'gender'          => $record->gender,
             'status'          => $record->status,
             'rejection_reason'=> $record->rejection_reason,
             'submitted_at'    => $record->created_at,
             'reviewed_at'     => $record->reviewed_at,
-            'requested_tier' => $record->requested_tier,
+            'requested_tier'  => $record->requested_tier,
         ];
     }
 }

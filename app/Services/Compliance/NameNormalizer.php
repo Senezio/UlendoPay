@@ -148,26 +148,48 @@ class NameNormalizer
             return (int) round($pct);
         }
 
-        // Surname match is mandatory — last token of each name must score >= 70
+        // Surname match — use levenshtein normalized by length for accuracy
+        // similar_text sees "banda" and "brand" as 80% similar — levenshtein correctly
+        // shows they are 2 edits apart on a 5-letter word (40% different)
         $surnameA = end($tokensA);
         $surnameB = end($tokensB);
-        similar_text($surnameA, $surnameB, $surnamePct);
 
-        if ($surnamePct < 70.0) {
-            return 55; // Below soft-match threshold — clear
+        $surnamePasses = $this->surnameSimilar($surnameA, $surnameB);
+
+        if (!$surnamePasses) {
+            // Last tokens don't match well — check if shorter name's surname
+            // matches ANY token in the longer name (Arabic name order handling)
+            $shorter      = count($tokensA) <= count($tokensB) ? $tokensA : $tokensB;
+            $longer       = count($tokensA) <= count($tokensB) ? $tokensB : $tokensA;
+            $shortSurname = end($shorter);
+            $altPasses    = false;
+
+            foreach ($longer as $tL) {
+                if ($this->surnameSimilar($shortSurname, $tL)) {
+                    $altPasses = true;
+                    break;
+                }
+            }
+
+            if (!$altPasses) {
+                return 55; // Surname not found anywhere in the other name — clear
+            }
         }
 
-        // Near-identical surnames (levenshtein 1-2) require strong first name match to BLOCK
-        // e.g. Johnson/Johnston are 1 edit apart — cap at FLAG unless first names also match strongly
-        $surnameEditDist = levenshtein($surnameA, $surnameB);
+        // First name must also match well — surname alone is never enough
+        // "Benson Kabila" vs "Joseph Kabila" → different people, should CLEAR
         $firstA = $tokensA[0];
         $firstB = $tokensB[0];
         similar_text($firstA, $firstB, $firstPct);
 
+        if ($firstPct < 55.0) {
+            return 55; // First names too different — clear regardless of surname
+        }
+
+        // Near-identical surnames (levenshtein 1-2) — cap at FLAG
+        // e.g. Johnson/Johnston — compliance officer must review
+        $surnameEditDist = levenshtein($surnameA, $surnameB);
         if ($surnameEditDist <= 2 && $surnameA !== $surnameB) {
-            // Surnames are close but not identical — always cap at FLAG (84)
-            // Even identical first names cannot confirm identity when surnames differ
-            // A compliance officer must review — never auto-block on near-surname alone
             $capAt84 = true;
         }
 
@@ -190,7 +212,7 @@ class NameNormalizer
 
         // Extra tokens in longer name — give partial credit at half weight
         $extraCount  = count($longer) - count($shorter);
-        $extraScores = array_fill(0, max(0, $extraCount), 50); // partial credit
+        $extraScores = array_fill(0, max(0, $extraCount), 0); // extra tokens get no credit — unknown identity element
 
         $allScores = array_merge($coreScores, $extraScores);
 
@@ -205,10 +227,10 @@ class NameNormalizer
             $totalWeight += $weight;
         }
 
-        // Add extra token partial scores at half weight
+        // Add extra token scores at full weight — unmatched tokens are genuine unknowns
         foreach ($extraScores as $s) {
-            $weightedSum += $s * 0.5;
-            $totalWeight += 0.5;
+            $weightedSum += $s * 1.0;
+            $totalWeight += 1.0;
         }
 
         $weighted = (int) round($weightedSum / $totalWeight);
@@ -296,6 +318,29 @@ class NameNormalizer
      * Calculate a soundex bonus (0–30) by comparing token soundex codes
      * across both names. Handles reordered name parts.
      */
+    /**
+     * Determine if two surname tokens are similar enough to proceed with scoring.
+     * Uses levenshtein normalized by max length — more accurate than similar_text
+     * for short strings where character overlap is misleading.
+     *
+     * "banda" vs "brand" → 2 edits / 5 chars = 60% similar → FALSE (not similar enough)
+     * "johnson" vs "johnston" → 1 edit / 8 chars = 87% similar → TRUE
+     * "mummert" vs "mummert" → 0 edits → TRUE
+     */
+    private function surnameSimilar(string $a, string $b): bool
+    {
+        if ($a === $b) return true;
+
+        $maxLen = max(strlen($a), strlen($b));
+        if ($maxLen === 0) return false;
+
+        $lev        = levenshtein($a, $b);
+        $similarity = 1 - ($lev / $maxLen);
+
+        // Require 75% similarity — 1 edit on 4+ char word passes, 2 edits on short word fails
+        return $similarity >= 0.75;
+    }
+
     private function soundexBonus(string $a, string $b): int
     {
         $tokensA = explode(' ', $a);
