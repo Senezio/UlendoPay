@@ -80,3 +80,29 @@ Schedule::command('claims:expire')
     ->onFailure(function () {
         Log::error('[scheduler] claims:expire FAILED');
     });
+
+// ── Compliance: Daily user re-screen ─────────────────────────────────────────
+// Runs daily at 01:00 — re-screens all active users against sanctions/PEP lists
+// Catches users who were clean at registration but appear on updated lists
+Schedule::command('compliance:daily-screen')
+    ->dailyAt('01:00')
+    ->withoutOverlapping()
+    ->onSuccess(function () {
+        Log::info('[scheduler] compliance:daily-screen completed successfully');
+    })
+    ->onFailure(function () {
+        Log::error('[scheduler] compliance:daily-screen FAILED — users may not be re-screened');
+    });
+
+// ── Compliance: Sync sanctions + PEP lists ───────────────────────────────────
+// Runs weekly on Sunday at 00:00 — pulls latest data from OpenSanctions
+// Daily screen runs after this so users are screened against fresh lists
+Schedule::command('compliance:sync-lists')
+    ->weeklyOn(0, '00:00')
+    ->withoutOverlapping()
+    ->onSuccess(function () {
+        Log::info('[scheduler] compliance:sync-lists completed successfully');
+    })
+    ->onFailure(function () {
+        Log::error('[scheduler] compliance:sync-lists FAILED — sanctions list may be stale');
+    });

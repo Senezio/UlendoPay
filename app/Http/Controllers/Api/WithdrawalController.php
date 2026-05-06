@@ -10,6 +10,7 @@ use App\Services\MtnMomoService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use App\Models\WebhookLog;
 
 class WithdrawalController extends Controller
 {
@@ -108,15 +109,50 @@ class WithdrawalController extends Controller
 
         if (!$this->verifyPawapaySignature($request)) {
             Log::warning('[Withdrawal][PawaPay] Invalid signature — webhook rejected');
+            WebhookLog::create([
+                'source'             => 'pawapay',
+                'direction'          => 'withdrawal',
+                'provider_reference' => $request->input('payoutId'),
+                'status'             => $request->input('status'),
+                'outcome'            => 'rejected',
+                'signature_valid'    => false,
+                'payload'            => $request->all(),
+                'ip_address'         => $request->ip(),
+            ]);
             return response()->json(['message' => 'Signature verification failed.'], 200);
         }
 
+        $payload = $request->all();
+        $providerReference = $payload['payoutId'] ?? $payload['depositId'] ?? null;
+        $status = $payload['status'] ?? null;
+
         try {
-            $this->withdrawalService->handleWebhook($request->all());
+            $this->withdrawalService->handleWebhook($payload);
+            WebhookLog::create([
+                'source'             => 'pawapay',
+                'direction'          => 'withdrawal',
+                'provider_reference' => $providerReference,
+                'status'             => $status,
+                'outcome'            => 'accepted',
+                'signature_valid'    => true,
+                'payload'            => $payload,
+                'ip_address'         => $request->ip(),
+            ]);
         } catch (\Throwable $e) {
             Log::error('[Withdrawal][PawaPay] Webhook processing failed', [
                 'error'   => $e->getMessage(),
-                'payload' => $request->all(),
+                'payload' => $payload,
+            ]);
+            WebhookLog::create([
+                'source'             => 'pawapay',
+                'direction'          => 'withdrawal',
+                'provider_reference' => $providerReference,
+                'status'             => $status,
+                'outcome'            => 'failed',
+                'signature_valid'    => true,
+                'payload'            => $payload,
+                'error'              => $e->getMessage(),
+                'ip_address'         => $request->ip(),
             ]);
         }
 

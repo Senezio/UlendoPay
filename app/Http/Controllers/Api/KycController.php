@@ -33,6 +33,8 @@ class KycController extends Controller
         $data = $request->validate([
             'document_type'   => 'required|in:passport,national_id,drivers_license,utility_bill,voters_card,bank_statement',
             'document_number' => 'nullable|string|max:50',
+            'date_of_birth'   => 'nullable|date|before:today|after:1900-01-01',
+            'gender'          => 'nullable|in:male,female,other',
             'document'        => 'required|file|mimes:jpeg,png,webp,pdf|max:15360',
             'requested_tier'  => 'nullable|in:basic,verified',
         ]);

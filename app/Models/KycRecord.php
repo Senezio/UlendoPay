@@ -5,7 +5,9 @@ use Illuminate\Database\Eloquent\Model;
 class KycRecord extends Model
 {
     protected $fillable = [
-        'user_id','document_type','document_number','file_path',
+        'user_id','document_type','document_number',
+        'date_of_birth',
+        'gender','file_path',
         'status','requested_tier','rejection_reason','reviewed_by','reviewed_at'
     ];
     protected $casts = ['reviewed_at' => 'datetime'];

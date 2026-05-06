@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Hash;
     'phone_encrypted', 'phone_hash', 'country_code',
     'kyc_status', 'status', 'kyc_verified_at', 'tier',
     'referral_code', 'referred_by', 'referral_discount_percent',
-    'phone_verified_at', 'last_login_at', 'last_login_method',
+    'phone_verified_at', 'last_login_at', 'last_login_method', 'last_screened_at',
 ])]
 #[Hidden(['password', 'remember_token', 'phone_encrypted', 'phone_hash', 'pin'])]
 class User extends Authenticatable

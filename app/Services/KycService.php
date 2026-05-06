@@ -30,7 +30,9 @@ class KycService
         ?string      $documentNumber,
         UploadedFile $file,
         string       $ipAddress = '',
-        ?string      $requestedTier = null
+        ?string      $requestedTier = null,
+        ?string      $dateOfBirth = null,
+        ?string      $gender = null
     ): KycRecord {
 
         // Validate file
@@ -42,9 +44,11 @@ class KycService
             ->first();
 
         if ($existing?->status === 'approved') {
-            $tierRank      = ['unverified' => 0, 'basic' => 1, 'verified' => 2];
+            // Build tier rank dynamically from database — no hardcoded names
+            $tierRank      = \App\Models\TransferTier::where('is_active', true)->orderBy('level')->pluck('level', 'name')->toArray();
             $currentRank   = $tierRank[$user->tier] ?? 0;
-            $requestedRank = $tierRank[$requestedTier ?? 'verified'] ?? 0;
+            $highestTier   = \App\Models\TransferTier::where('is_active', true)->orderByDesc('level')->value('name');
+            $requestedRank = $tierRank[$requestedTier ?? $highestTier] ?? 0;
             
             if ($requestedRank <= $currentRank) {
                 throw new \RuntimeException(
@@ -67,6 +71,8 @@ class KycService
             'user_id'         => $user->id,
             'document_type'   => $documentType,
             'document_number' => $documentNumber,
+            'date_of_birth'   => $dateOfBirth,
+            'gender'          => $gender,
             'file_path'       => $path,
             'status'          => 'pending',
             'requested_tier'  => $requestedTier,
@@ -105,14 +111,19 @@ class KycService
             'reviewed_at' => now(),
         ]);
 
-        $requestedTier = $record->requested_tier ?? 'verified';
+        $requestedTier = $record->requested_tier ?? \App\Models\TransferTier::where('is_active', true)->orderByDesc('level')->value('name') ?? 'verified';
         $user = $record->user;
         $user->kyc_status = 'verified';
         $user->tier       = $requestedTier;
+        if ($record->date_of_birth) $user->date_of_birth = $record->date_of_birth;
+        if ($record->gender)        $user->gender        = $record->gender;
         $user->save();
 
         // Sync tier with fresh instance to avoid stale cache
         app(\App\Services\TierService::class)->syncTier(\App\Models\User::find($user->id), $requestedTier);
+
+        // Compliance screen on KYC approval - AML requirement
+        app(\App\Services\Compliance\ComplianceService::class)->fullScreen($user->fresh(), "kyc_approval");
 
         // Notify user via SMS
         app(SmsService::class)->send([

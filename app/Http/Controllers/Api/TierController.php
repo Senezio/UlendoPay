@@ -80,8 +80,31 @@ class TierController extends Controller
             'fee_discount_percent'      => (float) $tier->fee_discount_percent,
             'referral_discount_percent' => (float) $user->referral_discount_percent,
             'total_discount_percent'    => min((float) $tier->fee_discount_percent + (float) $user->referral_discount_percent, 50),
-            'can_upgrade'               => $tier->name !== 'verified',
+            'can_upgrade'               => $tier->level < \App\Models\TransferTier::where('is_active', true)->max('level'),
         ]);
+    }
+
+    public function availableTiers(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $currentTier = \App\Models\TransferTier::where('name', $user->tier)->first();
+        $currentLevel = $currentTier?->level ?? -1;
+
+        $tiers = \App\Models\TransferTier::where('is_active', true)
+            ->where('level', '>', $currentLevel)
+            ->orderBy('level')
+            ->get(['name', 'label', 'level', 'per_transaction_limit', 'daily_limit', 'monthly_limit', 'limit_currency'])
+            ->map(fn($t) => [
+                'name'                  => $t->name,
+                'label'                 => $t->label,
+                'level'                 => $t->level,
+                'per_transaction_limit' => (float) $t->per_transaction_limit,
+                'daily_limit'           => (float) $t->daily_limit,
+                'monthly_limit'         => (float) $t->monthly_limit,
+                'limit_currency'        => $t->limit_currency,
+            ]);
+
+        return response()->json(['tiers' => $tiers]);
     }
 
     public function referral(Request $request): JsonResponse

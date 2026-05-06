@@ -10,6 +10,7 @@ use App\Services\MtnMomoService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use App\Models\WebhookLog;
 
 class TopUpController extends Controller
 {
@@ -101,21 +102,56 @@ class TopUpController extends Controller
      */
     public function pawapayWebhook(Request $request): JsonResponse
     {
+        $payload = $request->all();
+        $providerReference = $payload['depositId'] ?? null;
+        $status = $payload['status'] ?? null;
+
         Log::info('[TopUp][PawaPay] Webhook received', [
             'all_headers' => $request->headers->all(),
         ]);
 
         if (!$this->verifyPawapaySignature($request)) {
             Log::warning('[TopUp][PawaPay] Invalid signature — webhook rejected');
+            WebhookLog::create([
+                'source'             => 'pawapay',
+                'direction'          => 'topup',
+                'provider_reference' => $providerReference,
+                'status'             => $status,
+                'outcome'            => 'rejected',
+                'signature_valid'    => false,
+                'payload'            => $payload,
+                'ip_address'         => $request->ip(),
+            ]);
             return response()->json(['message' => 'Signature verification failed.'], 200);
         }
 
         try {
-            $this->topUpService->handleWebhook($request->all());
+            $this->topUpService->handleWebhook($payload);
+            WebhookLog::create([
+                'source'             => 'pawapay',
+                'direction'          => 'topup',
+                'provider_reference' => $providerReference,
+                'status'             => $status,
+                'outcome'            => 'accepted',
+                'signature_valid'    => true,
+                'payload'            => $payload,
+                'ip_address'         => $request->ip(),
+            ]);
         } catch (\Throwable $e) {
             Log::error('[TopUp][PawaPay] Webhook processing failed', [
                 'error'   => $e->getMessage(),
-                'payload' => $request->all(),
+                'payload' => $payload,
+            ]);
+            WebhookLog::create([
+                'source'             => 'pawapay',
+                'direction'          => 'topup',
+                'provider_reference' => $providerReference,
+                'status'             => $status,
+                'outcome'            => 'failed',
+                'signature_valid'    => true,
+                'payload'            => $payload,
+                'error'              => $e->getMessage(),
+                'ip_address'         => $request->ip(),
             ]);
         }
 
@@ -156,6 +192,17 @@ class TopUpController extends Controller
 
             if (!$confirmedStatus) {
                 Log::error('[TopUp][MTN] Could not verify status from MTN API');
+                WebhookLog::create([
+                    'source'             => 'mtn',
+                    'direction'          => 'topup',
+                    'provider_reference' => $mtnReference,
+                    'status'             => null,
+                    'outcome'            => 'failed',
+                    'signature_valid'    => true,
+                    'payload'            => $payload,
+                    'error'              => 'Could not verify status from MTN API',
+                    'ip_address'         => $request->ip(),
+                ]);
                 return response()->json(['message' => 'Verification failed.'], 200);
             }
 
@@ -166,10 +213,32 @@ class TopUpController extends Controller
 
             $this->topUpService->handleWebhook($verifiedPayload);
 
+            WebhookLog::create([
+                'source'             => 'mtn',
+                'direction'          => 'topup',
+                'provider_reference' => $mtnReference,
+                'status'             => $confirmedStatus,
+                'outcome'            => 'accepted',
+                'signature_valid'    => true,
+                'payload'            => $payload,
+                'ip_address'         => $request->ip(),
+            ]);
+
         } catch (\Throwable $e) {
             Log::error('[TopUp][MTN] Webhook processing failed', [
                 'error'   => $e->getMessage(),
                 'payload' => $payload,
+            ]);
+            WebhookLog::create([
+                'source'             => 'mtn',
+                'direction'          => 'topup',
+                'provider_reference' => $mtnReference,
+                'status'             => null,
+                'outcome'            => 'failed',
+                'signature_valid'    => true,
+                'payload'            => $payload,
+                'error'              => $e->getMessage(),
+                'ip_address'         => $request->ip(),
             ]);
         }
 

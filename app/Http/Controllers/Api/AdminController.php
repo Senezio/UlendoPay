@@ -65,6 +65,10 @@ class AdminController extends Controller
                 'new'        => FraudAlert::where('status', 'new')->count(),
                 'reviewing'  => FraudAlert::where('status', 'reviewing')->count(),
             ],
+            'compliance_alerts' => [
+                'new'        => \App\Models\ComplianceAlert::where('status', 'new')->count(),
+                'reviewing'  => \App\Models\ComplianceAlert::where('status', 'reviewing')->count(),
+            ],
         ];
 
         return response()->json($stats);
@@ -498,20 +502,18 @@ class AdminController extends Controller
         $user = \App\Models\User::findOrFail($id);
         $oldTier = $user->tier;
 
-        // Validate upgrade direction
-        $tierOrder = ['unverified' => 1, 'basic' => 2, 'verified' => 3];
-        if (($tierOrder[$data['tier']] ?? 0) <= ($tierOrder[$oldTier] ?? 0)) {
+        // Validate upgrade direction using level from DB — no hardcoded tier names
+        $tiers = \App\Models\TransferTier::where('is_active', true)->pluck('level', 'name');
+        if (($tiers[$data['tier']] ?? -1) <= ($tiers[$oldTier] ?? -1)) {
             return response()->json(['message' => 'Can only upgrade to a higher tier.'], 422);
         }
 
         $user->update(['tier' => $data['tier']]);
 
-        // If upgrading to verified, also update kyc_status
-        if ($data['tier'] === 'verified') {
-            $user->update(['kyc_status' => 'verified']);
-        } elseif ($data['tier'] === 'basic') {
-            $user->update(['kyc_status' => 'pending']);
-        }
+        // Update kyc_status based on tier level — highest tier = verified, others = pending
+        $maxLevel = \App\Models\TransferTier::where('is_active', true)->max('level');
+        $newLevel  = $tiers[$data['tier']] ?? -1;
+        $user->update(['kyc_status' => $newLevel >= $maxLevel ? 'verified' : 'pending']);
 
         AuditLog::create([
             'user_id'     => $request->user()->id,
@@ -574,37 +576,73 @@ class AdminController extends Controller
     public function analytics(Request $request): JsonResponse
     {
         $days = (int) $request->input('days', 30);
-        $days = min(max($days, 7), 90); // clamp between 7 and 90 days
+        $days = min(max($days, 7), 90);
 
-        $labels       = [];
+        $labels = [];
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $labels[] = now()->subDays($i)->format('M j');
+        }
+
+        // Get all active send currencies dynamically
+        $currencies = Transaction::where('status', 'completed')
+            ->distinct()
+            ->pluck('send_currency')
+            ->sort()
+            ->values();
+
+        // If no transactions yet, fall back to account currencies
+        if ($currencies->isEmpty()) {
+            $currencies = \App\Models\Account::where('type', 'fee')
+                ->distinct()
+                ->pluck('currency_code')
+                ->sort()
+                ->values();
+        }
+
+        // Build per-currency volume and revenue series
+        $volumeByCurrency  = [];
+        $revenueByCurrency = [];
+
+        foreach ($currencies as $currency) {
+            $volSeries = [];
+            $revSeries = [];
+
+            for ($i = $days - 1; $i >= 0; $i--) {
+                $date = now()->subDays($i)->toDateString();
+
+                $vol = (float) Transaction::whereDate('created_at', $date)
+                    ->where('status', 'completed')
+                    ->where('send_currency', $currency)
+                    ->sum('send_amount');
+
+                $rev = (float) \App\Models\JournalEntry::whereHas('account', fn($q) =>
+                        $q->where('type', 'fee')->where('currency_code', $currency))
+                    ->where('entry_type', 'credit')
+                    ->whereDate('posted_at', $date)
+                    ->sum('amount');
+
+                $volSeries[] = round($vol, 2);
+                $revSeries[] = round($rev, 2);
+            }
+
+            $volumeByCurrency[$currency]  = $volSeries;
+            $revenueByCurrency[$currency] = $revSeries;
+        }
+
+        // Daily transaction counts and top-ups (not currency specific)
         $transactions = [];
-        $volume       = [];
-        $revenue      = [];
         $topups       = [];
 
         for ($i = $days - 1; $i >= 0; $i--) {
             $date = now()->subDays($i)->toDateString();
-            $labels[] = now()->subDays($i)->format('M j');
 
-            $txCount = Transaction::whereDate('created_at', $date)->count();
-            $txVol   = (float) Transaction::whereDate('created_at', $date)
-                ->where('status', 'completed')
-                ->sum('send_amount');
-            $rev     = (float) \App\Models\JournalEntry::whereHas('account', fn($q) => $q->where('type', 'fee'))
-                ->where('entry_type', 'credit')
-                ->whereDate('posted_at', $date)
-                ->sum('amount');
-            $tpCount = \App\Models\TopUp::whereDate('created_at', $date)
+            $transactions[] = Transaction::whereDate('created_at', $date)->count();
+            $topups[]       = \App\Models\TopUp::whereDate('created_at', $date)
                 ->where('status', 'completed')
                 ->count();
-
-            $transactions[] = $txCount;
-            $volume[]       = round($txVol, 2);
-            $revenue[]      = round($rev, 2);
-            $topups[]       = $tpCount;
         }
 
-        // Corridor breakdown
+        // Corridor breakdown — dynamic, no hardcoding
         $corridors = Transaction::where('status', 'completed')
             ->selectRaw('send_currency, receive_currency, COUNT(*) as count, SUM(send_amount) as volume')
             ->groupBy('send_currency', 'receive_currency')
@@ -612,7 +650,7 @@ class AdminController extends Controller
             ->limit(10)
             ->get();
 
-        // Account balances
+        // Account balances — dynamic
         $accounts = \App\Models\Account::whereIn('type', ['fee', 'guarantee', 'escrow'])
             ->with('balance')
             ->get()
@@ -623,15 +661,30 @@ class AdminController extends Controller
                 'balance'  => (float) ($a->balance?->balance ?? 0),
             ]);
 
+        // Summary totals per currency
+        $totalsByCurrency = [];
+        foreach ($currencies as $currency) {
+            $totalsByCurrency[$currency] = [
+                'volume'       => array_sum($volumeByCurrency[$currency]),
+                'revenue'      => array_sum($revenueByCurrency[$currency]),
+                'transactions' => Transaction::where('status', 'completed')
+                    ->where('send_currency', $currency)
+                    ->whereBetween('created_at', [now()->subDays($days), now()])
+                    ->count(),
+            ];
+        }
+
         return response()->json([
-            'period'       => $days,
-            'labels'       => $labels,
-            'transactions' => $transactions,
-            'volume'       => $volume,
-            'revenue'      => $revenue,
-            'topups'       => $topups,
-            'corridors'    => $corridors,
-            'accounts'     => $accounts,
+            'period'             => $days,
+            'labels'             => $labels,
+            'currencies'         => $currencies->values(),
+            'volume_by_currency' => $volumeByCurrency,
+            'revenue_by_currency'=> $revenueByCurrency,
+            'transactions'       => $transactions,
+            'topups'             => $topups,
+            'totals_by_currency' => $totalsByCurrency,
+            'corridors'          => $corridors,
+            'accounts'           => $accounts,
         ]);
     }
 
@@ -745,6 +798,38 @@ class AdminController extends Controller
     {
         $mask = fn($val) => $val ? '••••••' . substr($val, -6) : null;
 
+        // System health checks
+        $dbOk = true;
+        try { \Illuminate\Support\Facades\DB::connection()->getPdo(); } catch (\Throwable) { $dbOk = false; }
+
+        $cacheOk = true;
+        try { \Illuminate\Support\Facades\Cache::put('_health', 1, 5); $cacheOk = \Illuminate\Support\Facades\Cache::get('_health') == 1; } catch (\Throwable) { $cacheOk = false; }
+
+        // Queue stats
+        $pendingJobs  = \Illuminate\Support\Facades\DB::table('jobs')->count();
+        $failedJobs   = \Illuminate\Support\Facades\DB::table('failed_jobs')->count();
+
+        // Account balances summary
+        $accountBalances = \Illuminate\Support\Facades\DB::table('accounts as a')
+            ->join('account_balances as b', 'a.id', '=', 'b.account_id')
+            ->whereIn('a.type', ['system', 'fee', 'escrow'])
+            ->select('a.type', 'a.currency_code', \Illuminate\Support\Facades\DB::raw('SUM(b.balance) as total'))
+            ->groupBy('a.type', 'a.currency_code')
+            ->orderBy('a.currency_code')
+            ->get();
+
+        // Exchange rates last fetched
+        $lastRate = \App\Models\ExchangeRate::latest('fetched_at')->first();
+
+        // Active corridors count
+        $activeCorridors = \App\Models\PartnerCorridor::where('is_active', true)->count();
+        $totalCorridors  = \App\Models\PartnerCorridor::count();
+
+        // Pending transactions
+        $pendingTxns = \App\Models\Transaction::whereIn('status', ['pending', 'escrowed', 'processing'])->count();
+        $pendingTopups = \App\Models\TopUp::where('status', 'pending')->count();
+        $pendingWithdrawals = \App\Models\Withdrawal::where('status', 'pending')->count();
+
         return response()->json([
             'services' => [
                 'pawapay' => [
@@ -782,10 +867,77 @@ class AdminController extends Controller
                 'debug'       => config('app.debug'),
                 'timezone'    => config('app.timezone'),
             ],
+            'health' => [
+                'database' => $dbOk,
+                'cache'    => $cacheOk,
+            ],
+            'queue' => [
+                'pending' => $pendingJobs,
+                'failed'  => $failedJobs,
+            ],
+            'transactions' => [
+                'pending_transfers'   => $pendingTxns,
+                'pending_topups'      => $pendingTopups,
+                'pending_withdrawals' => $pendingWithdrawals,
+            ],
+            'corridors' => [
+                'active' => $activeCorridors,
+                'total'  => $totalCorridors,
+            ],
+            'rates' => [
+                'last_fetched' => $lastRate?->fetched_at,
+                'total'        => \App\Models\ExchangeRate::where('is_active', true)->count(),
+            ],
+            'balances' => $accountBalances,
         ]);
     }
 
-    // ── Partner Management ────────────────────────────────────────────────────
+    
+
+    // ── Webhook Logs ─────────────────────────────────────────────
+
+    public function webhookLogs(Request $request): JsonResponse
+    {
+        $query = \App\Models\WebhookLog::query()->orderByDesc('received_at');
+
+        if ($request->filled('source')) {
+            $query->where('source', $request->source);
+        }
+        if ($request->filled('direction')) {
+            $query->where('direction', $request->direction);
+        }
+        if ($request->filled('outcome')) {
+            $query->where('outcome', $request->outcome);
+        }
+        if ($request->filled('from')) {
+            $query->whereDate('received_at', '>=', $request->from);
+        }
+        if ($request->filled('to')) {
+            $query->whereDate('received_at', '<=', $request->to);
+        }
+
+        $total    = (clone $query)->count();
+        $accepted = (clone $query)->where('outcome', 'accepted')->count();
+        $failed   = (clone $query)->where('outcome', 'failed')->count();
+        $rejected = (clone $query)->where('outcome', 'rejected')->count();
+
+        $paginated = $query->paginate(50);
+
+        return response()->json([
+            'logs'      => $paginated->items(),
+            'last_page' => $paginated->lastPage(),
+            'summary'   => compact('total', 'accepted', 'failed', 'rejected'),
+        ]);
+    }
+
+    public function webhookLogShow(int $id): JsonResponse
+    {
+        $log = \App\Models\WebhookLog::findOrFail($id);
+        return response()->json(['log' => $log]);
+    }
+
+
+// ── Partner Management ────────────────────────────────────────────────────
 
     /**
      * List all partners with their corridors and stats.
@@ -1190,6 +1342,52 @@ class AdminController extends Controller
     /**
      * Partner health stats — disbursement attempt breakdown.
      */
+
+    /**
+     * Admin audit log — all staff actions across the platform.
+     */
+    public function adminAuditLog(Request $request): JsonResponse
+    {
+        $query = \App\Models\AuditLog::with('user')->orderByDesc('created_at');
+
+        if ($request->filled('action'))      $query->where('action', $request->action);
+        if ($request->filled('entity_type')) $query->where('entity_type', $request->entity_type);
+        if ($request->filled('user_id'))     $query->where('user_id', $request->user_id);
+        if ($request->filled('from'))        $query->whereDate('created_at', '>=', $request->from);
+        if ($request->filled('to'))          $query->whereDate('created_at', '<=', $request->to);
+
+        if ($request->filled('search')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('action', 'like', "%{$request->search}%")
+                  ->orWhere('entity_type', 'like', "%{$request->search}%")
+                  ->orWhere('ip_address', 'like', "%{$request->search}%");
+            });
+        }
+
+        $logs = $query->paginate(50);
+
+        return response()->json([
+            'logs' => $logs->map(fn($log) => [
+                'id'          => $log->id,
+                'action'      => $log->action,
+                'entity_type' => $log->entity_type,
+                'entity_id'   => $log->entity_id,
+                'old_values'  => $log->old_values,
+                'new_values'  => $log->new_values,
+                'ip_address'  => $log->ip_address,
+                'created_at'  => $log->created_at,
+                'staff'       => $log->user ? [
+                    'id'   => $log->user->id,
+                    'name' => $log->user->name,
+                    'role' => $log->user->role,
+                ] : null,
+            ]),
+            'total'        => $logs->total(),
+            'current_page' => $logs->currentPage(),
+            'last_page'    => $logs->lastPage(),
+        ]);
+    }
+
     public function partnerHealth(Request $request): \Illuminate\Http\JsonResponse
     {
         $stats = \App\Models\Partner::with(['corridors'])->get()->map(function ($partner) {
@@ -1229,6 +1427,164 @@ class AdminController extends Controller
         });
 
         return response()->json(['partners' => $stats]);
+    }
+
+
+    // ── Compliance Alerts ────────────────────────────────────────────────────
+
+    public function complianceAlerts(Request $request): JsonResponse
+    {
+        $query = \App\Models\ComplianceAlert::with([
+            'user:id,name,email,country_code,kyc_status,status',
+            'screen:id,screen_type,input_name,match_score,match_details,triggered_by,screened_at',
+        ]);
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('alert_type')) {
+            $query->where('alert_type', $request->alert_type);
+        }
+
+        if ($request->filled('severity')) {
+            $query->where('severity', $request->severity);
+        }
+
+        $alerts = $query->orderByRaw("FIELD(severity, 'critical', 'high', 'medium', 'low')")
+            ->orderByDesc('created_at')
+            ->paginate(25);
+
+        return response()->json($alerts);
+    }
+
+    public function complianceAlertShow(Request $request, int $id): JsonResponse
+    {
+        $alert = \App\Models\ComplianceAlert::with([
+            'user:id,name,email,country_code,kyc_status,tier,status,created_at',
+            'screen',
+        ])->findOrFail($id);
+
+        // Resolve matched entry details
+        $matchedEntry = null;
+        if ($alert->screen?->sanctions_entry_id) {
+            $matchedEntry = \App\Models\SanctionsEntry::find(
+                $alert->screen->sanctions_entry_id,
+                ['id', 'name', 'aliases', 'country_codes', 'date_of_birth', 'source', 'list_reference']
+            );
+        } elseif ($alert->screen?->pep_entry_id) {
+            $matchedEntry = \App\Models\PepEntry::find(
+                $alert->screen->pep_entry_id,
+                ['id', 'name', 'aliases', 'country_code', 'position', 'risk_level', 'source']
+            );
+        }
+
+        return response()->json([
+            'alert'         => $alert,
+            'matched_entry' => $matchedEntry,
+        ]);
+    }
+
+    public function complianceAlertClear(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['notes' => 'required|string|max:1000']);
+
+        $alert = \App\Models\ComplianceAlert::findOrFail($id);
+
+        if ($alert->status !== 'new' && $alert->status !== 'reviewing') {
+            return response()->json(['message' => 'Alert is already resolved.'], 422);
+        }
+
+        $alert->update([
+            'status'           => 'cleared',
+            'reviewed_by'      => $request->user()->id,
+            'reviewed_at'      => now(),
+            'resolution_notes' => $request->notes,
+        ]);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'admin.compliance.cleared',
+            'entity_type' => 'ComplianceAlert',
+            'entity_id'   => $alert->id,
+            'new_values'  => ['notes' => $request->notes],
+            'ip_address'  => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Alert cleared.']);
+    }
+
+    public function complianceAlertConfirm(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['notes' => 'required|string|max:1000']);
+
+        $alert = \App\Models\ComplianceAlert::findOrFail($id);
+
+        if ($alert->status !== 'new' && $alert->status !== 'reviewing') {
+            return response()->json(['message' => 'Alert is already resolved.'], 422);
+        }
+
+        $alert->update([
+            'status'           => 'confirmed',
+            'reviewed_by'      => $request->user()->id,
+            'reviewed_at'      => now(),
+            'resolution_notes' => $request->notes,
+        ]);
+
+        // Escalate — suspend user and freeze wallets if not already done
+        $user = \App\Models\User::find($alert->user_id);
+        if ($user && $user->status !== 'suspended') {
+            $user->update(['status' => 'suspended']);
+        }
+        \App\Models\Wallet::where('user_id', $alert->user_id)
+            ->where('status', 'active')
+            ->update(['status' => 'frozen']);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'admin.compliance.confirmed',
+            'entity_type' => 'ComplianceAlert',
+            'entity_id'   => $alert->id,
+            'new_values'  => ['notes' => $request->notes, 'user_suspended' => true],
+            'ip_address'  => $request->ip(),
+        ]);
+
+        return response()->json(['message' => 'Match confirmed. User suspended and wallets frozen.']);
+    }
+
+    public function complianceAlertReview(Request $request, int $id): JsonResponse
+    {
+        $alert = \App\Models\ComplianceAlert::findOrFail($id);
+
+        if ($alert->status !== 'new') {
+            return response()->json(['message' => 'Alert is not in new status.'], 422);
+        }
+
+        $alert->update([
+            'status'      => 'reviewing',
+            'reviewed_by' => $request->user()->id,
+        ]);
+
+        return response()->json(['message' => 'Alert marked as under review.']);
+    }
+
+    public function complianceStats(): JsonResponse
+    {
+        return response()->json([
+            'alerts' => [
+                'new'       => \App\Models\ComplianceAlert::where('status', 'new')->count(),
+                'reviewing' => \App\Models\ComplianceAlert::where('status', 'reviewing')->count(),
+                'confirmed' => \App\Models\ComplianceAlert::where('status', 'confirmed')->count(),
+                'cleared'   => \App\Models\ComplianceAlert::where('status', 'cleared')->count(),
+            ],
+            'by_type' => [
+                'sanctions' => \App\Models\ComplianceAlert::where('alert_type', 'sanctions_match')->where('status', 'new')->count(),
+                'pep'       => \App\Models\ComplianceAlert::where('alert_type', 'pep_match')->where('status', 'new')->count(),
+            ],
+            'sanctions_entries' => \App\Models\SanctionsEntry::where('active', true)->count(),
+            'pep_entries'       => \App\Models\PepEntry::where('active', true)->count(),
+            'last_synced'       => \App\Models\SanctionsEntry::max('last_synced_at'),
+        ]);
     }
 
 }

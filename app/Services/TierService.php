@@ -7,16 +7,41 @@ use App\Models\TransferTier;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class TierService
 {
     /**
-     * Get the effective tier limits for a user.
+     * Get the effective tier for a user by matching their tier name.
+     * Falls back to the lowest active tier if no match found.
      */
     public function getTier(User $user): TransferTier
     {
         return TransferTier::where('name', $user->tier)
             ->where('is_active', true)
+            ->first()
+            ?? TransferTier::where('is_active', true)
+                ->orderBy('level')
+                ->firstOrFail();
+    }
+
+    /**
+     * Get tier by level — level-based lookup, no hardcoded names.
+     */
+    public function getTierByLevel(int $level): ?TransferTier
+    {
+        return TransferTier::where('level', $level)
+            ->where('is_active', true)
+            ->first();
+    }
+
+    /**
+     * Get the default entry-level tier (lowest level).
+     */
+    public function getDefaultTier(): TransferTier
+    {
+        return TransferTier::where('is_active', true)
+            ->orderBy('level')
             ->firstOrFail();
     }
 
@@ -25,16 +50,15 @@ class TierService
      */
     public function effectiveFee(User $user, float $feeAmount): float
     {
-        $tier            = $this->getTier($user);
-        $tierDiscount    = (float) $tier->fee_discount_percent;
-        $referralDiscount= (float) $user->referral_discount_percent;
-        $totalDiscount   = min($tierDiscount + $referralDiscount, 50); // max 50% discount
+        $tier             = $this->getTier($user);
+        $tierDiscount     = (float) $tier->fee_discount_percent;
+        $referralDiscount = (float) $user->referral_discount_percent;
+        $totalDiscount    = min($tierDiscount + $referralDiscount, 50);
         return round($feeAmount * (1 - $totalDiscount / 100), 6);
     }
 
     /**
      * Convert a limit amount from the tier's limit_currency to the user's send currency.
-     * Uses ZAR as the pivot currency via available exchange rates.
      */
     public function convertLimit(float $amount, string $fromCurrency, string $toCurrency): float
     {
@@ -42,48 +66,40 @@ class TierService
 
         $rateEngine = app(\App\Services\RateEngine::class);
 
-        // Try direct rate first
         $direct = $rateEngine->getRate($fromCurrency, $toCurrency);
         if ($direct) return round($amount * (float) $direct->rate, 6);
 
-        // Triangulate via ZAR: fromCurrency -> ZAR -> toCurrency
-        $toZar   = $rateEngine->getRate($fromCurrency, 'ZAR');
-        $zarTo   = $rateEngine->getRate('ZAR', $toCurrency);
+        $toZar = $rateEngine->getRate($fromCurrency, 'ZAR');
+        $zarTo = $rateEngine->getRate('ZAR', $toCurrency);
 
         if ($toZar && $zarTo) {
             return round($amount * (float) $toZar->rate * (float) $zarTo->rate, 6);
         }
 
-        // Triangulate via ZAR inverse: USD -> ZAR (via inverse of ZAR->USD)
         $zarToUsd = $rateEngine->getRate('ZAR', $fromCurrency);
         if ($zarToUsd && $zarTo) {
             $usdToZar = 1 / (float) $zarToUsd->rate;
             return round($amount * $usdToZar * (float) $zarTo->rate, 6);
         }
 
-        // Fallback — return unconverted (should not happen in production)
-        \Illuminate\Support\Facades\Log::warning('[TierService] Could not convert limit', [
-            'from' => $fromCurrency, 'to' => $toCurrency, 'amount' => $amount
+        Log::warning('[TierService] Could not convert limit', [
+            'from' => $fromCurrency, 'to' => $toCurrency, 'amount' => $amount,
         ]);
         return $amount;
     }
 
     /**
      * Check if a transaction amount is within user's tier limits.
-     * Limits are stored in limit_currency (default USD) and converted to send currency.
-     * Throws RuntimeException if limit exceeded.
      */
     public function checkLimits(User $user, float $amount, string $currency): void
     {
-        $tier         = $this->getTier($user);
+        $tier          = $this->getTier($user);
         $limitCurrency = $tier->limit_currency ?? 'USD';
 
-        // Convert limits to user's send currency
-        $perTxLimit    = $this->convertLimit((float) $tier->per_transaction_limit, $limitCurrency, $currency);
-        $dailyLimit    = $this->convertLimit((float) $tier->daily_limit,            $limitCurrency, $currency);
-        $monthlyLimit  = $this->convertLimit((float) $tier->monthly_limit,          $limitCurrency, $currency);
+        $perTxLimit   = $this->convertLimit((float) $tier->per_transaction_limit, $limitCurrency, $currency);
+        $dailyLimit   = $this->convertLimit((float) $tier->daily_limit,            $limitCurrency, $currency);
+        $monthlyLimit = $this->convertLimit((float) $tier->monthly_limit,          $limitCurrency, $currency);
 
-        // Per transaction limit
         if ($amount > $perTxLimit) {
             throw new \RuntimeException(
                 "Amount exceeds your per-transaction limit of {$currency} " .
@@ -94,7 +110,6 @@ class TierService
 
         $today = Carbon::now()->toDateString();
 
-        // Daily limit
         $dailyTotal = Transaction::where('sender_id', $user->id)
             ->where('send_currency', $currency)
             ->whereDate('created_at', $today)
@@ -109,7 +124,6 @@ class TierService
             );
         }
 
-        // Monthly limit
         $monthlyTotal = Transaction::where('sender_id', $user->id)
             ->where('send_currency', $currency)
             ->whereYear('created_at', Carbon::now()->year)
@@ -127,18 +141,59 @@ class TierService
     }
 
     /**
-     * Upgrade user tier based on KYC status.
+     * Sync user tier based on KYC status or an explicit target tier name.
+     * Uses level-based ordering — never hardcodes tier names.
      */
-    public function syncTier(User $user, ?string $targetTier = null): void
+    public function syncTier(User $user, ?string $targetTierName = null): void
     {
-        $tier = $targetTier ?? match($user->kyc_status) {
-            'verified' => 'verified',
-            'pending'  => 'basic',
-            default    => 'unverified',
+        if ($targetTierName) {
+            // Explicit tier name — validate it exists and is active
+            $tier = TransferTier::where('name', $targetTierName)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$tier) {
+                Log::warning('[TierService] syncTier: target tier not found', [
+                    'user_id'     => $user->id,
+                    'target_tier' => $targetTierName,
+                ]);
+                return;
+            }
+
+            if ($user->tier !== $tier->name) {
+                $user->update(['tier' => $tier->name]);
+                Log::info('[TierService] User tier updated', [
+                    'user_id'  => $user->id,
+                    'old_tier' => $user->tier,
+                    'new_tier' => $tier->name,
+                ]);
+            }
+            return;
+        }
+
+        // Auto-assign based on KYC status using level ordering — no hardcoded names
+        $allTiers = TransferTier::where('is_active', true)->orderBy('level')->get();
+
+        if ($allTiers->isEmpty()) {
+            Log::warning('[TierService] No active tiers found — cannot sync user tier', [
+                'user_id' => $user->id,
+            ]);
+            return;
+        }
+
+        $tier = match($user->kyc_status) {
+            'verified' => $allTiers->last(),   // highest level tier
+            'pending'  => $allTiers->count() > 1 ? $allTiers->get(1) : $allTiers->first(), // second tier
+            default    => $allTiers->first(),  // lowest level tier
         };
 
-        if ($user->tier !== $tier) {
-            $user->update(['tier' => $tier]);
+        if ($tier && $user->tier !== $tier->name) {
+            $user->update(['tier' => $tier->name]);
+            Log::info('[TierService] User tier auto-synced', [
+                'user_id'    => $user->id,
+                'kyc_status' => $user->kyc_status,
+                'new_tier'   => $tier->name,
+            ]);
         }
     }
 
@@ -172,18 +227,16 @@ class TierService
             return;
         }
 
-        // Link referral
         $newUser->update([
             'referred_by'               => $referrer->id,
-            'referral_discount_percent' => 5, // 5% fee discount for referred user
+            'referral_discount_percent' => 5,
         ]);
 
-        // Create referral record
         Referral::create([
             'referrer_id'               => $referrer->id,
             'referred_id'               => $newUser->id,
             'status'                    => 'pending',
-            'referrer_discount_percent' => 5, // referrer gets 5% too once qualified
+            'referrer_discount_percent' => 5,
             'referred_discount_percent' => 5,
         ]);
     }
@@ -204,7 +257,6 @@ class TierService
             'qualified_at' => now(),
         ]);
 
-        // Apply discount to referrer
         $referral->referrer->increment('referral_discount_percent', 5);
     }
 
@@ -217,7 +269,6 @@ class TierService
         string $toCurrency,
         ?User  $user = null
     ): array {
-        // Get rate from exchange rates table
         $rate = \App\Models\ExchangeRate::where('from_currency', $fromCurrency)
             ->where('to_currency', $toCurrency)
             ->where('is_active', true)
@@ -228,7 +279,6 @@ class TierService
             throw new \RuntimeException("No rate available for {$fromCurrency} to {$toCurrency}.");
         }
 
-        // Get corridor fee
         $corridor = \App\Models\PartnerCorridor::where('from_currency', $fromCurrency)
             ->where('to_currency', $toCurrency)
             ->where('is_active', true)
@@ -243,7 +293,6 @@ class TierService
         $feeFlat    = (float) $corridor->fee_flat;
         $feeAmount  = round($amount * ($feePercent / 100) + $feeFlat, 6);
 
-        // Apply user discount if logged in
         $discountPercent = 0;
         if ($user) {
             $tier            = $this->getTier($user);
@@ -254,7 +303,7 @@ class TierService
             $feeAmount = round($feeAmount * (1 - $discountPercent / 100), 6);
         }
 
-        $netAmount    = $amount - $feeAmount;
+        $netAmount     = $amount - $feeAmount;
         $receiveAmount = round($netAmount * (float) $rate->rate, 6);
 
         return [
@@ -267,7 +316,6 @@ class TierService
             'exchange_rate'    => (float) $rate->rate,
             'receive_amount'   => $receiveAmount,
             'discount_percent' => $discountPercent,
-
         ];
     }
 }

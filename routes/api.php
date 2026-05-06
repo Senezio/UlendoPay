@@ -66,6 +66,7 @@ Route::prefix('v1')->group(function () {
 
         // Transfer tiers
         Route::get('/tier', [\App\Http\Controllers\Api\TierController::class, 'show']);
+        Route::get('/tier/available', [\App\Http\Controllers\Api\TierController::class, 'availableTiers']);
         Route::get('/referral', [\App\Http\Controllers\Api\TierController::class, 'referral']);
 
         // Two-Factor Authentication
@@ -117,6 +118,11 @@ Route::prefix('v1')->group(function () {
 
         // ── Admin routes ─────────────────────────────────────────────────────
         Route::prefix('admin')->middleware('admin')->group(function () {
+
+            // Webhook logs (admin)
+            Route::get('/webhooks/logs', [AdminController::class, 'webhookLogs']);
+            Route::get('/webhooks/logs/{id}', [AdminController::class, 'webhookLogShow']);
+
 
             Route::get('/stats',     [AdminController::class, 'stats']);
             Route::get('/audit-log',  [AdminController::class, 'adminAuditLog']);
@@ -178,6 +184,17 @@ Route::prefix('v1')->group(function () {
                 ->middleware('admin:super_admin,finance_officer');
             Route::post('/fraud-alerts/{id}/confirm', [AdminController::class, 'fraudAlertConfirm'])
                 ->middleware('admin:super_admin,finance_officer');
+
+            // Compliance alerts
+            Route::get('/compliance/stats',                    [AdminController::class, 'complianceStats']);
+            Route::get('/compliance/alerts',                   [AdminController::class, 'complianceAlerts']);
+            Route::get('/compliance/alerts/{id}',              [AdminController::class, 'complianceAlertShow']);
+            Route::post('/compliance/alerts/{id}/review',      [AdminController::class, 'complianceAlertReview'])
+                ->middleware('admin:super_admin,kyc_reviewer');
+            Route::post('/compliance/alerts/{id}/clear',       [AdminController::class, 'complianceAlertClear'])
+                ->middleware('admin:super_admin,kyc_reviewer');
+            Route::post('/compliance/alerts/{id}/confirm',     [AdminController::class, 'complianceAlertConfirm'])
+                ->middleware('admin:super_admin');
 
             // Tier management
             Route::get('/tiers',                        [AdminController::class, 'tierList']);
