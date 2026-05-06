@@ -65,4 +65,11 @@ return [
         'from'     => env('AT_FROM', 'UlendoPay'),
     ],
 
+
+    'terrapay' => [
+        'base_url' => env('TERRAPAY_BASE_URL', 'https://uat-connect.terrapay.com:21211'),
+        'username' => env('TERRAPAY_USERNAME', ''),
+        'password' => env('TERRAPAY_PASSWORD', ''),
+        'timeout'  => env('TERRAPAY_TIMEOUT', 30),
+    ],
 ];

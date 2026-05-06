@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\KycController;
 use App\Http\Controllers\Api\TopUpController;
 use App\Http\Controllers\Api\WithdrawalController;
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\ReportingController;
 
 Route::prefix('v1')->group(function () {
 
@@ -212,4 +213,14 @@ Route::prefix('v1')->group(function () {
                 ->middleware('admin:super_admin');
         });
     });
+
+        // ── Financial Reporting ──────────────────────────────────────────────
+        Route::prefix('reports')
+            ->middleware(['auth:sanctum', 'admin:super_admin,finance_officer'])
+            ->group(function () {
+                Route::get('trial-balance', [ReportingController::class, 'trialBalance']);
+                Route::get('balance-sheet',  [ReportingController::class, 'balanceSheet']);
+                Route::get('profit-loss',    [ReportingController::class, 'profitLoss']);
+                Route::get('cash-flow',      [ReportingController::class, 'cashFlow']);
+            });
 });

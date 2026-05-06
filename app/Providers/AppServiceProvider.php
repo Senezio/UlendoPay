@@ -8,9 +8,28 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use App\Services\Reporting\TrialBalanceService;
+use App\Services\Reporting\BalanceSheetService;
+use App\Services\Reporting\ProfitLossService;
+use App\Services\Reporting\CashFlowService;
 
 class AppServiceProvider extends ServiceProvider
 {
+    public function register(): void
+    {
+        $this->app->singleton(TrialBalanceService::class);
+
+        $this->app->singleton(BalanceSheetService::class, function ($app) {
+            return new BalanceSheetService(
+                trialBalance: $app->make(TrialBalanceService::class)
+            );
+        });
+
+        $this->app->singleton(ProfitLossService::class);
+
+        $this->app->singleton(CashFlowService::class);
+    }
+
     public function boot(): void
     {
         User::observe(UserObserver::class);

@@ -8,20 +8,14 @@ use App\Models\DisbursementAttempt;
 use App\Services\Contracts\PartnerInterface;
 use App\Services\Partners\PawapayPartner;
 use App\Services\Partners\MtnMomoPartner;
+use App\Services\Partners\TerraPayPartner;
 use Illuminate\Support\Facades\Log;
 
 class PartnerService
 {
     /**
-     * Resolve the best available partner for this transaction's corridor
-     * then execute the disbursement.
-     *
-     * Routing priority:
-     *   1. PawaPay  — preferred for all corridors it supports
-     *   2. MTN MoMo — fallback for currencies PawaPay does not cover
-     *
-     * Never throws for partner API failures.
-     * Only throws for unrecoverable configuration errors.
+     * @param  Transaction  $transaction
+     * @return PartnerResult
      */
     public function disburse(Transaction $transaction): PartnerResult
     {
@@ -37,7 +31,6 @@ class PartnerService
             );
         }
 
-        // Update transaction with resolved partner
         $transaction->update(['partner_id' => $this->getPartnerModel($partner)->id]);
 
         Log::info('Disbursing via partner', [
@@ -48,7 +41,6 @@ class PartnerService
 
         $result = $partner->disburse($transaction);
 
-        // Record the attempt regardless of outcome
         DisbursementAttempt::create([
             'transaction_id'   => $transaction->id,
             'partner_id'       => $transaction->partner_id,
@@ -67,7 +59,6 @@ class PartnerService
             'responded_at'     => now(),
         ]);
 
-        // Update partner success rate
         $this->updatePartnerMetrics(
             $this->getPartnerModel($partner),
             $result->success,
@@ -78,8 +69,8 @@ class PartnerService
     }
 
     /**
-     * Check status of an ambiguous disbursement.
-     * Called when a previous attempt timed out and we don't know if it succeeded.
+     * @param  Transaction  $transaction
+     * @return PartnerResult
      */
     public function checkStatus(Transaction $transaction): PartnerResult
     {
@@ -103,13 +94,9 @@ class PartnerService
     }
 
     /**
-     * Resolve the highest-priority active partner for a corridor.
-     *
-     * The partner_corridors.priority column controls preference:
-     *   priority 1 = PawaPay (preferred)
-     *   priority 2 = MTN MoMo (fallback)
-     *
-     * Lower number = higher priority (ordered ASC).
+     * @param  string  $fromCurrency
+     * @param  string  $toCurrency
+     * @return PartnerInterface|null
      */
     private function resolvePartner(
         string $fromCurrency,
@@ -146,6 +133,7 @@ class PartnerService
         return match($code) {
             'PAWAPAY' => new PawapayPartner(),
             'MTNMOMO' => new MtnMomoPartner(),
+            'TERRAPAY' => new TerraPayPartner(),
             default   => null,
         };
     }
@@ -171,6 +159,7 @@ class PartnerService
         $code = match(true) {
             $partner instanceof PawapayPartner => 'PAWAPAY',
             $partner instanceof MtnMomoPartner => 'MTNMOMO',
+            $partner instanceof TerraPayPartner => 'TERRAPAY',
             default => throw new \RuntimeException('Unknown partner instance'),
         };
 
