@@ -110,7 +110,7 @@ class TransactionService
                 // Fee calculation
                 $rawFee          = $isSameCurrency ? 0.0 : $this->calculateFee($sendAmount, $rateLock);
                 $feeAmount       = $isSameCurrency ? 0.0 : app(TierService::class)->effectiveFee($sender, $rawFee);
-                $guaranteeAmount = $isSameCurrency ? 0.0 : $this->calculateGuarantee($sendAmount, $sendCurrency, $receiveCurrency);
+                $guaranteeAmount = $isSameCurrency ? 0.0 : $this->calculateGuarantee($sendAmount, $sendCurrency, $receiveCurrency, $rateLock->guarantee_percent ?? null);
                 $escrowAmount    = $sendAmount - $feeAmount - $guaranteeAmount;
                 $receiveAmount   = round($escrowAmount * $lockedRate, 6);
 
@@ -604,12 +604,23 @@ class TransactionService
     }
 
     private function calculateGuarantee(
-        float $amount,
-        string $fromCurrency,
-        string $toCurrency
+        float   $amount,
+        string  $fromCurrency,
+        string  $toCurrency,
+        ?float  $guaranteePercent = null
     ): float {
-        // 0.5% guarantee contribution — adjust per corridor business rules
-        return round($amount * 0.005, 6);
+        if ($guaranteePercent !== null) {
+            return round($amount * $guaranteePercent, 6);
+        }
+
+        // Fallback: read from active corridor configuration
+        $corridor = \App\Models\PartnerCorridor::whereHas('partner', fn($q) => $q->where('is_active', true))
+            ->where('from_currency', $fromCurrency)
+            ->where('to_currency', $toCurrency)
+            ->where('is_active', true)
+            ->first();
+
+        return round($amount * ($corridor?->guarantee_percent ?? 0.005), 6);
     }
 
     private function generateReference(): string

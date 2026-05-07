@@ -29,8 +29,9 @@ class RateLockController extends Controller
         if ($from === $to) {
             // Same currency — use system 1:1 rate, zero fees
             $rate = app(RateEngine::class)->getRate($from, $to);
-            $feePercent = 0.0;
-            $feeFlat    = 0.0;
+            $feePercent       = 0.0;
+            $feeFlat          = 0.0;
+            $guaranteePercent = 0.0;
         } else {
             // Get the latest active rate for this corridor
             $rate = ExchangeRate::where('from_currency', $from)
@@ -60,8 +61,9 @@ class RateLockController extends Controller
                 ], 422);
             }
 
-            $feePercent = $corridor->fee_percent;
-            $feeFlat    = $corridor->fee_flat;
+            $feePercent       = $corridor->fee_percent;
+            $feeFlat          = $corridor->fee_flat;
+            $guaranteePercent = $corridor->guarantee_percent;
         }
 
         // Check tier limits before locking rate
@@ -82,6 +84,7 @@ class RateLockController extends Controller
             'locked_rate'      => $rate->rate,
             'fee_percent'      => $feePercent,
             'fee_flat'         => $feeFlat,
+            'guarantee_percent' => $guaranteePercent ?? 0.005,
             'status'           => 'active',
             'expires_at'       => Carbon::now()->addMinutes(self::LOCK_MINUTES),
         ]);
