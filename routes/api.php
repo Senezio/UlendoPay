@@ -81,6 +81,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/verify-email',    [AuthController::class, 'verifyEmail']);
         Route::get('/auth/sessions',         [AuthController::class, 'sessions']);
         Route::delete('/auth/sessions/{id}', [AuthController::class, 'revokeSession']);
+    Route::delete('/auth/account', [AuthController::class, 'closeAccount']);
         Route::delete('/auth/sessions',      [AuthController::class, 'revokeAllSessions']);
         Route::get('/auth/audit-log',        [AuthController::class, 'auditLog']);
 

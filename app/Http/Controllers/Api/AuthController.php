@@ -895,6 +895,53 @@ class AuthController extends Controller
      * Look up a user by phone number.
      * Returns minimal public info — used for recipient lookup in SendMoney.
      */
+    public function closeAccount(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'pin'    => 'required|string',
+            'reason' => 'required|string|max:500',
+        ]);
+
+        $user = $request->user();
+
+        // Verify PIN before allowing closure
+        if (!$user->verifyPin($data['pin'])) {
+            return response()->json(['message' => 'Incorrect PIN.'], 422);
+        }
+
+        // Cannot close a suspended account through this flow
+        if ($user->status === 'suspended') {
+            return response()->json([
+                'message' => 'Your account has been suspended. Please contact support.'
+            ], 422);
+        }
+
+        if ($user->status === 'closed') {
+            return response()->json(['message' => 'Account is already closed.'], 422);
+        }
+
+        $service = app(\App\Services\AccountClosureService::class);
+
+        // Pre-validate and return blocking reasons before attempting closure
+        $blockingReasons = $service->validate($user);
+        if (!empty($blockingReasons)) {
+            return response()->json([
+                'message' => 'Account cannot be closed at this time.',
+                'reasons' => $blockingReasons,
+            ], 422);
+        }
+
+        try {
+            $service->close($user, $data['reason'], $request->ip());
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Your account has been permanently closed. All personal data has been anonymized.'
+        ]);
+    }
+
     public function lookup(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
     {
         $request->validate(['phone' => 'required|string|max:20']);
