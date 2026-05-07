@@ -27,6 +27,11 @@ class FraudDetectionService
     const UNUSUAL_HOUR_END      = 5;
     const RECIPIENT_SENDER_MAX  = 5;
 
+    // Compliance screen risk scores
+    const SCORE_SANCTIONS_BLOCKED = 100; // definitive sanctions match — always flag
+    const SCORE_SANCTIONS_FLAGGED = 80;  // probable sanctions match — high risk
+    const SCORE_SCREEN_STALE      = 20;  // last screen > 25hrs ago — nightly job missed
+
     /**
      * Analyse a pending transaction for fraud signals.
      * Returns array of triggered rules and total risk score.
@@ -111,6 +116,64 @@ class FraudDetectionService
                 'score'   => self::SCORE_RECIPIENT_MULTI,
             ];
             $totalScore += self::SCORE_RECIPIENT_MULTI;
+        }
+
+        // Rule 5: Compliance sanctions screen
+        // Reads cached result from compliance_screens — no fuzzy match at transaction time.
+        // If the user has an active sanctions block or flag, add to risk score immediately.
+        // If the screen is stale (> 25 hours), flag for re-screen — nightly job may have been missed.
+        $latestSanctionsScreen = \App\Models\ComplianceScreen::where('user_id', $sender->id)
+            ->where('screen_type', 'sanctions')
+            ->latest('screened_at')
+            ->first();
+
+        if ($latestSanctionsScreen) {
+            if ($latestSanctionsScreen->result === 'blocked') {
+                $triggeredRules[] = [
+                    'rule'   => 'sanctions_blocked',
+                    'detail' => 'User has an active sanctions block — definitive match on record.',
+                    'score'  => self::SCORE_SANCTIONS_BLOCKED,
+                ];
+                $totalScore += self::SCORE_SANCTIONS_BLOCKED;
+            } elseif ($latestSanctionsScreen->result === 'flagged') {
+                $triggeredRules[] = [
+                    'rule'   => 'sanctions_flagged',
+                    'detail' => 'User has an active sanctions flag — probable match on record.',
+                    'score'  => self::SCORE_SANCTIONS_FLAGGED,
+                ];
+                $totalScore += self::SCORE_SANCTIONS_FLAGGED;
+            }
+
+            // Check staleness — nightly screen runs at 01:00, so > 25hrs means it was missed
+            if ($latestSanctionsScreen->screened_at->diffInHours(now()) > 25) {
+                $triggeredRules[] = [
+                    'rule'   => 'screen_stale',
+                    'detail' => 'Compliance screen is over 25 hours old — nightly job may have been missed.',
+                    'score'  => self::SCORE_SCREEN_STALE,
+                ];
+                $totalScore += self::SCORE_SCREEN_STALE;
+
+                // Queue a re-screen via outbox without blocking this transaction
+                \App\Models\OutboxEvent::create([
+                    'event_type'     => 'reconciliation_triggered',
+                    'transaction_id' => null,
+                    'payload'        => [
+                        'type'    => 'compliance_rescreen',
+                        'user_id' => $sender->id,
+                        'reason'  => 'stale_screen_detected_at_transaction',
+                    ],
+                    'status'          => 'pending',
+                    'next_attempt_at' => now(),
+                ]);
+            }
+        } else {
+            // No screen on record at all — user was never screened
+            $triggeredRules[] = [
+                'rule'   => 'screen_missing',
+                'detail' => 'No compliance screen found for this user.',
+                'score'  => self::SCORE_SCREEN_STALE,
+            ];
+            $totalScore += self::SCORE_SCREEN_STALE;
         }
 
         return [

@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\TopUpController;
 use App\Http\Controllers\Api\WithdrawalController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\ReportingController;
+use App\Http\Controllers\Api\PeriodController;
 
 Route::prefix('v1')->group(function () {
 
@@ -222,5 +223,18 @@ Route::prefix('v1')->group(function () {
                 Route::get('balance-sheet',  [ReportingController::class, 'balanceSheet']);
                 Route::get('profit-loss',    [ReportingController::class, 'profitLoss']);
                 Route::get('cash-flow',      [ReportingController::class, 'cashFlow']);
+            });
+
+        // ── Accounting Periods ───────────────────────────────────────────────
+        Route::prefix('periods')
+            ->middleware(['auth:sanctum', 'admin:super_admin,finance_officer'])
+            ->group(function () {
+                Route::get('/',             [PeriodController::class, 'index']);
+                Route::get('/{id}',         [PeriodController::class, 'show']);
+                Route::post('/',            [PeriodController::class, 'open']);
+                Route::post('/{id}/close',  [PeriodController::class, 'close']);
+                Route::post('/{id}/reopen', [PeriodController::class, 'reopen']);
+                Route::post('/{id}/lock',   [PeriodController::class, 'lock']);
+                Route::get('/{id}/snapshots', [PeriodController::class, 'snapshots']);
             });
 });

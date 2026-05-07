@@ -205,12 +205,29 @@ class ProcessOutboxEvents extends Command
 
     private function handleReconciliation(OutboxEvent $event): void
     {
-        // ReconciliationService will be built as part of the scheduler
-        // Placeholder that fails loudly rather than silently
-        throw new \RuntimeException(
-            'ReconciliationService not yet implemented. ' .
-            'Build it before enabling reconciliation_triggered events.'
-        );
+        // Triggered on-demand via outbox - e.g. after a manual adjustment
+        // or admin-initiated reconciliation request.
+        // The scheduled nightly path (reconcile:accounts at 02:00) calls
+        // ReconciliationService::runDaily() directly and bypasses this.
+        $reconciliation = app(\App\Services\ReconciliationService::class);
+        $results        = $reconciliation->runDaily();
+
+        $this->line(sprintf(
+            '[outbox] Reconciliation complete for %s - total: %d, matched: %d, mismatch: %d, errors: %d',
+            $results['date'],
+            $results['total'],
+            $results['matched'],
+            $results['mismatch'],
+            $results['errors']
+        ));
+
+        if ($results['mismatch'] > 0 || $results['errors'] > 0) {
+            throw new \RuntimeException(
+                'Reconciliation completed with ' . $results['mismatch'] . ' mismatch(es)'
+                . ' and ' . $results['errors'] . ' error(s) on ' . $results['date'] . '.'
+                . ' Check reconciliation_snapshots table.'
+            );
+        }
     }
 
     private function creditRecipientWallet(\App\Models\Transaction $transaction): void

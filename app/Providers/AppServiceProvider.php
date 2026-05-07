@@ -12,6 +12,7 @@ use App\Services\Reporting\TrialBalanceService;
 use App\Services\Reporting\BalanceSheetService;
 use App\Services\Reporting\ProfitLossService;
 use App\Services\Reporting\CashFlowService;
+use App\Services\PeriodService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -28,6 +29,15 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ProfitLossService::class);
 
         $this->app->singleton(CashFlowService::class);
+
+        $this->app->singleton(PeriodService::class, function ($app) {
+            return new PeriodService(
+                trialBalance: $app->make(TrialBalanceService::class),
+                balanceSheet: $app->make(BalanceSheetService::class),
+                profitLoss:   $app->make(ProfitLossService::class),
+                cashFlow:     $app->make(CashFlowService::class),
+            );
+        });
     }
 
     public function boot(): void

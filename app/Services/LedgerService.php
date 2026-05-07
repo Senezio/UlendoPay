@@ -9,6 +9,7 @@ use App\Models\JournalEntryGroup;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Carbon;
+use App\Services\PeriodService;
 
 class LedgerService
 {
@@ -41,6 +42,11 @@ class LedgerService
         return DB::transaction(function () use (
             $reference, $type, $currency, $entries, $description, $reversalOfGroupId
         ) {
+            // ── 0. Reject entries into locked periods ───────────────────────
+            // PeriodService::assertNotLocked() throws if the entry date
+            // falls within a locked accounting period.
+            app(PeriodService::class)->assertNotLocked(Carbon::now());
+
             // ── 1. Validate entries balance ──────────────────────────────
             $totalDebits  = $this->sumSide($entries, 'debit');
             $totalCredits = $this->sumSide($entries, 'credit');
