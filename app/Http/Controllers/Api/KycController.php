@@ -44,7 +44,7 @@ class KycController extends Controller
             'date_of_birth'   => 'required_if:document_type,passport,national_id,drivers_license,voters_card|nullable|date|before:today|after:1900-01-01',
             'gender'          => 'required_if:document_type,passport,national_id,drivers_license,voters_card|nullable|in:male,female,other',
             'document'        => 'required|file|mimes:jpeg,png,webp,pdf|max:15360',
-            'requested_tier'  => 'nullable|in:basic,verified',
+            'requested_tier'  => 'nullable|in:' . \App\Models\TransferTier::where('is_active', true)->where('level', '>', 0)->pluck('name')->implode(','),
         ]);
 
         try {

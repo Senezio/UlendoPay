@@ -495,7 +495,7 @@ class AdminController extends Controller
     public function userUpgradeTier(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
-            'tier'   => 'required|in:unverified,basic,verified',
+            'tier'   => 'required|in:' . \App\Models\TransferTier::where('is_active', true)->pluck('name')->implode(','),
             'reason' => 'nullable|string',
         ]);
 
