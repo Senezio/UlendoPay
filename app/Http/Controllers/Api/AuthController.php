@@ -56,7 +56,8 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::create([
+        // Build user without saving first so phone/PIN mutators fire before created observer
+        $user = new User([
             'name'         => $data['name'],
             'email'        => $data['email'] ?? null,
             'password'     => isset($data['password']) && ($data['password'] ?? null) ? Hash::make($data['password']) : Hash::make(\Illuminate\Support\Str::random(32)),
@@ -65,10 +66,10 @@ class AuthController extends Controller
             'status'       => 'active',
         ]);
 
-        // Use mutators for encrypted fields
+        // Set encrypted fields via mutators BEFORE save so phone_hash is stored atomically
         $user->phone = $data['phone'];
         $user->pin   = $data['pin'];
-        $user->save();
+        $user->save(); // Observer fires here - phone_hash is already set
         if (app()->environment('local')) {
             // Local: Auto-verify and jump to dashboard
             $user->update(['phone_verified_at' => now()]);
