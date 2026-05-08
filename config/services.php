@@ -72,4 +72,12 @@ return [
         'password' => env('TERRAPAY_PASSWORD', ''),
         'timeout'  => env('TERRAPAY_TIMEOUT', 30),
     ],
+
+    'forexrateapi' => [
+        'base_url'      => env('FOREXRATEAPI_BASE_URL', 'https://api.forexrateapi.com/v1'),
+        'api_key'       => env('FOREXRATEAPI_API_KEY', ''),
+        'base_currency' => env('FOREXRATEAPI_BASE_CURRENCY', 'USD'),
+        'expiry_hours'  => env('FOREXRATEAPI_EXPIRY_HOURS', 14),
+    ],
+
 ];

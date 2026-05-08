@@ -4,10 +4,10 @@ use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Log;
 
 // ── Exchange Rate Fetch ───────────────────────────────────────────────────────
-// Runs daily at 07:00 — RBM publishes rates early morning Malawi time
+// Runs twice daily at 06:00 and 18:00 — fits within 100 requests/month free tier
 // If fetch fails, stale rates are flagged and new transactions are blocked
 Schedule::command('rates:fetch')
-    ->dailyAt('07:00')
+    ->twiceDaily(6, 18)
     ->withoutOverlapping()
     ->onSuccess(function () {
         Log::info('[scheduler] rates:fetch completed successfully');
