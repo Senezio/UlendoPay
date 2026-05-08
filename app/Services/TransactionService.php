@@ -135,7 +135,6 @@ class TransactionService
                 }
 
                 if (!$isSameCurrency) {
-                    // System accounts — only needed for cross-currency transfers
                     $escrowAccount    = Account::where('type', 'escrow')
                         ->where('currency_code', $sendCurrency)->firstOrFail();
                     $feeAccount       = Account::where('type', 'fee')
@@ -179,13 +178,96 @@ class TransactionService
                     $this->fraud->createAlert($transaction, $fraudAnalysis);
                 }
 
-                if ($isSameCurrency) {
-                    // ── Same-currency: find recipient by phone ────────────
+                if ($recipient->payment_method === 'wallet_transfer') {
+                    // ── Wallet-to-wallet: credit by account number ────────
+                    $recipientAccount = Account::where('code', $recipient->wallet_account)
+                        ->where('type', 'user_wallet')
+                        ->where('is_active', true)
+                        ->first();
+
+                    if (!$recipientAccount) {
+                        throw new \RuntimeException(
+                            "Wallet account {$recipient->wallet_account} not found or inactive."
+                        );
+                    }
+
+                    if ($recipientAccount->currency_code !== $receiveCurrency) {
+                        throw new \RuntimeException(
+                            "Wallet account currency does not match the selected destination currency."
+                        );
+                    }
+
+                    $group = $this->ledger->post(
+                        reference:   "TXN-{$reference}-WALLET",
+                        type:        'transfer_initiation',
+                        currency:    $sendCurrency,
+                        entries: [
+                            [
+                                'account_id'  => $senderAccount->id,
+                                'type'        => 'debit',
+                                'amount'      => $sendAmount,
+                                'description' => "Wallet transfer {$reference}",
+                            ],
+                            [
+                                'account_id'  => $recipientAccount->id,
+                                'type'        => 'credit',
+                                'amount'      => $receiveAmount,
+                                'description' => "Wallet transfer received {$reference}",
+                            ],
+                        ],
+                        description: "Wallet-to-wallet transfer {$reference}"
+                    );
+
+                    $transaction->update([
+                        'journal_entry_group_id' => $group->id,
+                        'status'                 => 'completed',
+                        'escrowed_at'            => Carbon::now(),
+                        'completed_at'           => Carbon::now(),
+                    ]);
+
+                    $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
+
+                    app(TierService::class)->qualifyReferral($sender);
+
+                    $recipientUser = User::find($recipientAccount->owner_id);
+
+                    OutboxEvent::create([
+                        'event_type'     => 'sms_notification',
+                        'transaction_id' => $transaction->id,
+                        'payload'        => [
+                            'type'      => 'transfer_sent',
+                            'reference' => $reference,
+                            'amount'    => $sendAmount,
+                            'currency'  => $sendCurrency,
+                            'phone'     => $sender->phone,
+                        ],
+                        'status'          => 'pending',
+                        'next_attempt_at' => Carbon::now(),
+                    ]);
+
+                    if ($recipientUser) {
+                        OutboxEvent::create([
+                            'event_type'     => 'sms_notification',
+                            'transaction_id' => $transaction->id,
+                            'payload'        => [
+                                'type'      => 'transfer_received',
+                                'reference' => $reference,
+                                'amount'    => $receiveAmount,
+                                'currency'  => $receiveCurrency,
+                                'phone'     => $recipientUser->phone,
+                            ],
+                            'status'          => 'pending',
+                            'next_attempt_at' => Carbon::now(),
+                        ]);
+                    }
+
+                } elseif ($isSameCurrency) {
+                    // ── Same-currency transfer ───────────────────────────
                     $recipientPhoneHash = hash('sha256', $recipient->mobile_number);
                     $recipientUser      = User::where('phone_hash', $recipientPhoneHash)->first();
 
                     if ($recipientUser) {
-                        // Registered user — credit their wallet directly
+    
                         $recipientAccount = Account::where('owner_id', $recipientUser->id)
                             ->where('owner_type', User::class)
                             ->where('type', 'user_wallet')
@@ -262,7 +344,6 @@ class TransactionService
                         ]);
 
                     } else {
-                        // Unregistered recipient — hold in escrow, create pending claim
                         $escrowAccount = Account::where('type', 'escrow')
                             ->where('currency_code', $sendCurrency)->firstOrFail();
 
@@ -343,7 +424,6 @@ class TransactionService
                     }
 
                 } else {
-                    // ── Cross-currency: escrow + disbursement flow ────────
                     $group = $this->ledger->post(
                         reference:   "TXN-{$reference}-INIT",
                         type:        'transfer_initiation',
@@ -385,9 +465,7 @@ class TransactionService
 
                     $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
 
-                    // Queue internal settlement via outbox.
-                    // Escrow is released to MWK pool, recipient's ZMW wallet
-                    // is credited from ZMW pool. No partner/PawaPay call needed.
+                    // Queue cross-currency internal settlement via outbox.
                     OutboxEvent::create([
                         'event_type'     => 'internal_settlement',
                         'transaction_id' => $transaction->id,

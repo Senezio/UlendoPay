@@ -33,12 +33,8 @@ class RateLockController extends Controller
             $feeFlat          = 0.0;
             $guaranteePercent = 0.0;
         } else {
-            // Get the latest active rate for this corridor
-            $rate = ExchangeRate::where('from_currency', $from)
-                ->where('to_currency', $to)
-                ->active()
-                ->latest('fetched_at')
-                ->first();
+            // Get rate via RateEngine (supports synthetic cross-rates)
+            $rate = app(RateEngine::class)->getRate($from, $to);
 
             if (!$rate) {
                 return response()->json([
@@ -78,13 +74,14 @@ class RateLockController extends Controller
 
         $lock = RateLock::create([
             'user_id'          => $request->user()->id,
-            'exchange_rate_id' => $rate->id,
+            'exchange_rate_id' => $rate->id ?? null,
             'from_currency'    => $from,
             'to_currency'      => $to,
             'locked_rate'      => $rate->rate,
             'fee_percent'      => $feePercent,
             'fee_flat'         => $feeFlat,
             'guarantee_percent' => $guaranteePercent ?? 0.005,
+            'send_amount'      => (float) $data['send_amount'],
             'status'           => 'active',
             'expires_at'       => Carbon::now()->addMinutes(self::LOCK_MINUTES),
         ]);

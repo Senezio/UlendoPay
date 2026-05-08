@@ -269,11 +269,7 @@ class TierService
         string $toCurrency,
         ?User  $user = null
     ): array {
-        $rate = \App\Models\ExchangeRate::where('from_currency', $fromCurrency)
-            ->where('to_currency', $toCurrency)
-            ->where('is_active', true)
-            ->latest('fetched_at')
-            ->first();
+        $rate = app(\App\Services\RateEngine::class)->getRate($fromCurrency, $toCurrency);
 
         if (!$rate) {
             throw new \RuntimeException("No rate available for {$fromCurrency} to {$toCurrency}.");

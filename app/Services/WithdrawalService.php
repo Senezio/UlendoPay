@@ -459,6 +459,211 @@ class WithdrawalService
         }
     }
 
+    /**
+     * Initiate a bank withdrawal via TerraPay.
+     *
+     * Unlike mobile money withdrawals, TerraPay does not send webhooks.
+     * Status is polled via the outbox worker using checkStatus().
+     * The ledger debit happens at initiation — funds are held in the POOL account.
+     * On confirmed completion, POOL is debited and EQUITY is credited.
+     * On failure, POOL is credited back to the user wallet (refund).
+     */
+    public function initiateBank(
+        User   $user,
+        string $bankAccountNumber,
+        string $bankBranchCode,
+        string $bankName,
+        string $countryCode,
+        float  $amount
+    ): Withdrawal {
+        $wallet = $user->wallets()->where('status', 'active')->first();
+
+        if (!$wallet) {
+            throw new \RuntimeException("No active wallet found for user {$user->id}.");
+        }
+
+        $currency = $wallet->currency_code;
+
+        if ($amount < 1) {
+            throw new \RuntimeException("Minimum withdrawal amount is 1 {$currency}.");
+        }
+
+        return DB::transaction(function () use (
+            $user, $wallet, $amount, $currency,
+            $bankAccountNumber, $bankBranchCode, $bankName, $countryCode
+        ) {
+            $userAccount = Account::where('owner_id', $user->id)
+                ->where('owner_type', \App\Models\User::class)
+                ->where('type', 'user_wallet')
+                ->where('currency_code', $currency)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $balance = (float) ($userAccount->balance?->balance ?? 0);
+
+            if ($amount > $balance) {
+                throw new \RuntimeException(
+                    "Insufficient balance. Available: {$currency} " . number_format($balance, 2)
+                );
+            }
+
+            $systemAccount = Account::where('code', "{$currency}-POOL")
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $withdrawal = Withdrawal::create([
+                'reference'          => Withdrawal::generateReference(),
+                'user_id'            => $user->id,
+                'wallet_id'          => $wallet->id,
+                'amount'             => $amount,
+                'currency_code'      => $currency,
+                'withdrawal_method'  => 'bank_transfer',
+                'provider'           => 'terrapay',
+                'bank_account_number'=> $bankAccountNumber,
+                'bank_branch_code'   => $bankBranchCode,
+                'bank_name'          => $bankName,
+                'country_code'       => $countryCode,
+                'status'             => 'initiated',
+                'initiated_at'       => now(),
+            ]);
+
+            // Debit user wallet — hold in POOL pending TerraPay confirmation
+            app(LedgerService::class)->post(
+                reference:   "WDR-{$withdrawal->reference}",
+                type:        'adjustment',
+                currency:    $currency,
+                entries: [
+                    [
+                        'account_id'  => $userAccount->id,
+                        'type'        => 'debit',
+                        'amount'      => $amount,
+                        'description' => "Bank withdrawal: {$withdrawal->reference}",
+                    ],
+                    [
+                        'account_id'  => $systemAccount->id,
+                        'type'        => 'credit',
+                        'amount'      => $amount,
+                        'description' => "Bank withdrawal held: {$withdrawal->reference}",
+                    ],
+                ],
+                description: "Bank withdrawal initiated: {$withdrawal->reference}"
+            );
+
+            // Queue TerraPay disbursement via outbox
+            \App\Models\OutboxEvent::create([
+                'event_type'     => 'disbursement_requested',
+                'transaction_id' => null,
+                'payload'        => [
+                    'type'          => 'bank_withdrawal',
+                    'withdrawal_id' => $withdrawal->id,
+                    'reference'     => $withdrawal->reference,
+                ],
+                'status'          => 'pending',
+                'next_attempt_at' => now(),
+                'max_attempts'    => 3,
+            ]);
+
+            AuditLog::create([
+                'user_id'     => $user->id,
+                'action'      => 'withdrawal.bank.initiated',
+                'entity_type' => 'Withdrawal',
+                'entity_id'   => $withdrawal->id,
+                'new_values'  => [
+                    'reference'    => $withdrawal->reference,
+                    'amount'       => $amount,
+                    'currency'     => $currency,
+                    'bank_account' => $bankAccountNumber,
+                    'provider'     => 'terrapay',
+                ],
+            ]);
+
+            $withdrawal->update(['status' => 'pending']);
+
+            return $withdrawal->fresh();
+        });
+    }
+
+    /**
+     * Poll TerraPay for status of a pending bank withdrawal.
+     * Called by the outbox worker for bank_withdrawal events.
+     */
+    public function pollBankWithdrawal(Withdrawal $withdrawal): void
+    {
+        if ($withdrawal->status !== 'pending') {
+            return;
+        }
+
+        if (empty($withdrawal->provider_reference)) {
+            throw new \RuntimeException(
+                "Withdrawal {$withdrawal->reference} has no provider reference to poll."
+            );
+        }
+
+        $terrapay = new \App\Services\Partners\TerraPayPartner();
+        $result   = $terrapay->checkStatus($withdrawal->provider_reference);
+
+        if ($result->success) {
+            DB::transaction(function () use ($withdrawal) {
+                $currency = $withdrawal->currency_code;
+
+                $poolAccount = Account::where('code', "{$currency}-POOL")
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $equityAccount = Account::where('code', "{$currency}-EQUITY")
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                app(LedgerService::class)->post(
+                    reference:   "WDR-COMPLETE-{$withdrawal->reference}",
+                    type:        'adjustment',
+                    currency:    $currency,
+                    entries: [
+                        [
+                            'account_id'  => $poolAccount->id,
+                            'type'        => 'debit',
+                            'amount'      => $withdrawal->amount,
+                            'description' => "Bank withdrawal disbursed: {$withdrawal->reference}",
+                        ],
+                        [
+                            'account_id'  => $equityAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => $withdrawal->amount,
+                            'description' => "Bank withdrawal exited system: {$withdrawal->reference}",
+                        ],
+                    ],
+                    description: "Bank withdrawal completion: {$withdrawal->reference}"
+                );
+
+                $withdrawal->update([
+                    'status'       => 'completed',
+                    'completed_at' => now(),
+                ]);
+            });
+
+            \App\Models\OutboxEvent::create([
+                'event_type'     => 'sms_notification',
+                'transaction_id' => null,
+                'payload'        => [
+                    'type'         => 'withdrawal_completed',
+                    'phone'        => $withdrawal->user->phone,
+                    'amount'       => $withdrawal->amount,
+                    'currency'     => $withdrawal->currency_code,
+                    'reference'    => $withdrawal->reference,
+                    'country_code' => $withdrawal->country_code,
+                ],
+                'status' => 'pending',
+            ]);
+
+        } elseif (str_contains($result->failureReason ?? '', 'pending')) {
+            // Still processing — throw so outbox retries
+            throw new \RuntimeException("Bank withdrawal still pending: {$withdrawal->reference}");
+        } else {
+            // Definitive failure — refund
+            $this->refundWallet($withdrawal, $result->failureReason ?? 'TerraPay disbursement failed');
+        }
+    }
+
     public function refundPendingStuck(Withdrawal $withdrawal): void
     {
         if ($withdrawal->status !== 'pending') {

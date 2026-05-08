@@ -89,11 +89,40 @@ class RateEngine
             );
         }
 
-        return ExchangeRate::where('from_currency', $fromCurrency)
+        // Try direct pair first
+        $direct = ExchangeRate::where('from_currency', $fromCurrency)
             ->where('to_currency', $toCurrency)
             ->active()
             ->latest('fetched_at')
             ->first();
+
+        if ($direct) return $direct;
+
+        // Fall back to USD chaining: fromCurrency → USD → toCurrency
+        $base = $this->baseCurrency;
+        if ($fromCurrency === $base || $toCurrency === $base) return null;
+
+        $fromToBase = ExchangeRate::where('from_currency', $fromCurrency)
+            ->where('to_currency', $base)
+            ->active()
+            ->latest('fetched_at')
+            ->first();
+
+        $baseToTarget = ExchangeRate::where('from_currency', $base)
+            ->where('to_currency', $toCurrency)
+            ->active()
+            ->latest('fetched_at')
+            ->first();
+
+        if (!$fromToBase || !$baseToTarget) return null;
+
+        $crossRate = round($fromToBase->rate * $baseToTarget->rate, 8);
+
+        ExchangeRate::where('from_currency', $fromCurrency)->where('to_currency', $toCurrency)->where('source', 'SYNTHETIC')->update(['is_active' => false]);
+
+        $synthetic = ExchangeRate::create(['from_currency' => $fromCurrency, 'to_currency' => $toCurrency, 'rate' => $crossRate, 'inverse_rate' => round(1 / $crossRate, 8), 'middle_rate' => $crossRate, 'margin_percent' => 0, 'source' => 'SYNTHETIC', 'is_active' => true, 'is_stale' => false, 'fetched_at' => now(), 'expires_at' => now()->addHours($this->expiryHours)]);
+
+        return $synthetic;
     }
 
     /**

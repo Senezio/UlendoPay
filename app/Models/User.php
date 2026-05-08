@@ -70,6 +70,7 @@ class User extends Authenticatable
     public function wallets()         { return $this->hasMany(Wallet::class); }
     public function accounts()        { return $this->morphMany(Account::class, 'owner'); }
     public function recipients()      { return $this->hasMany(Recipient::class); }
+    public function bankAccounts()     { return $this->hasMany(UserBankAccount::class); }
     public function transactions()    { return $this->hasMany(Transaction::class, 'sender_id'); }
     public function rateLocks()       { return $this->hasMany(RateLock::class); }
     public function idempotencyKeys() { return $this->hasMany(IdempotencyKey::class); }

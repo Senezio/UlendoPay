@@ -27,12 +27,13 @@ class RecipientController extends Controller
             'full_name'           => 'required|string|max:255',
             'phone'               => 'nullable|string|max:20',
             'country_code'        => 'required|string|size:3',
-            'payment_method'      => 'required|in:mobile_money,bank_transfer,cash_pickup',
+            'payment_method'      => 'required|in:mobile_money,bank_transfer,cash_pickup,wallet_transfer',
             'mobile_network'      => 'required_if:payment_method,mobile_money|nullable|string',
             'mobile_number'       => 'required_if:payment_method,mobile_money|nullable|string',
             'bank_name'           => 'required_if:payment_method,bank_transfer|nullable|string',
             'bank_account_number' => 'required_if:payment_method,bank_transfer|nullable|string',
             'bank_branch_code'    => 'nullable|string',
+            'wallet_account'      => 'required_if:payment_method,wallet_transfer|nullable|string|max:20',
         ]);
 
         if (isset($data['full_name'])) {

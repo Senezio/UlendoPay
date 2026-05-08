@@ -73,6 +73,7 @@ Route::prefix('v1')->group(function () {
 
         // Two-Factor Authentication
         Route::get('/auth/account-numbers', [AuthController::class, 'accountNumbers']);
+        Route::get('/wallets/lookup', [AuthController::class, 'walletLookup']);
         Route::get('/auth/2fa/setup',    [AuthController::class, 'twoFactorSetup']);
         Route::post('/auth/2fa/enable',  [AuthController::class, 'twoFactorEnable']);
         Route::post('/auth/2fa/disable', [AuthController::class, 'twoFactorDisable']);
@@ -103,12 +104,20 @@ Route::prefix('v1')->group(function () {
         // Withdrawals
         Route::get('/withdraw/operators',          [WithdrawalController::class, 'operators']);
         Route::post('/withdraw/initiate',          [WithdrawalController::class, 'initiate']);
+        Route::post('/withdraw/initiate/bank',     [WithdrawalController::class, 'initiateBank']);
         Route::get('/withdraw/status/{reference}', [WithdrawalController::class, 'status']);
         Route::get('/withdraw/history',            [WithdrawalController::class, 'history']);
 
         // Recipients
         Route::post('/recipients/predict-network', [RecipientController::class, 'predictNetwork']);
         Route::apiResource('/recipients', RecipientController::class);
+
+        // Bank accounts
+        Route::get('/bank-accounts',                [\App\Http\Controllers\Api\UserBankAccountController::class, 'index']);
+        Route::post('/bank-accounts',               [\App\Http\Controllers\Api\UserBankAccountController::class, 'store']);
+        Route::put('/bank-accounts/{id}',           [\App\Http\Controllers\Api\UserBankAccountController::class, 'update']);
+        Route::delete('/bank-accounts/{id}',        [\App\Http\Controllers\Api\UserBankAccountController::class, 'destroy']);
+        Route::post('/bank-accounts/{id}/default',  [\App\Http\Controllers\Api\UserBankAccountController::class, 'setDefault']);
 
         // Rate locks
         Route::post('/rate-locks',     [RateLockController::class, 'store']);

@@ -70,6 +70,46 @@ class WithdrawalController extends Controller
         }
     }
 
+    /**
+     * Initiate a bank transfer withdrawal via TerraPay.
+     */
+    public function initiateBank(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'bank_account_number' => 'required|string|max:50',
+            'bank_branch_code'    => 'required|string|max:20',
+            'bank_name'           => 'required|string|max:100',
+            'country_code'        => 'required|string|size:3',
+            'amount'              => 'required|numeric|min:1',
+        ]);
+
+        try {
+            $withdrawal = $this->withdrawalService->initiateBank(
+                user:               $request->user(),
+                bankAccountNumber:  $data['bank_account_number'],
+                bankBranchCode:     $data['bank_branch_code'],
+                bankName:           $data['bank_name'],
+                countryCode:        strtoupper($data['country_code']),
+                amount:             (float) $data['amount'],
+            );
+
+            return response()->json([
+                'message'   => 'Bank withdrawal initiated. Funds will be transferred to your bank account.',
+                'reference' => $withdrawal->reference,
+                'status'    => $withdrawal->status,
+                'amount'    => $withdrawal->amount,
+                'currency'  => $withdrawal->currency_code,
+            ], 201);
+
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code'    => 'WITHDRAWAL_FAILED',
+            ], 422);
+        }
+    }
+
+
     public function status(Request $request, string $reference): JsonResponse
     {
         $withdrawal = Withdrawal::where('reference', $reference)

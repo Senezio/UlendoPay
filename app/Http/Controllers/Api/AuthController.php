@@ -490,6 +490,26 @@ class AuthController extends Controller
 
     // ── Two-Factor Authentication ─────────────────────────────────────────────
 
+    public function walletLookup(Request $request): JsonResponse
+    {
+        $request->validate(['code' => 'required|string']);
+
+        $code    = preg_replace('/\s+/', '', $request->code);
+        $account = \App\Models\Account::where('code', $code)
+            ->where('type', 'user_wallet')
+            ->where('is_active', true)
+            ->first();
+
+        if (!$account) {
+            return response()->json(['found' => false], 404);
+        }
+
+        return response()->json([
+            'found'    => true,
+            'currency' => $account->currency_code,
+        ]);
+    }
+
     public function accountNumbers(Request $request): JsonResponse
     {
         $user = $request->user();
