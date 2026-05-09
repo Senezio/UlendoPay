@@ -2,25 +2,24 @@
 
 namespace App\Services\Reporting;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 
 /**
  * Balance Sheet (Statement of Financial Position)
  *
- * Fundamental equation: Assets = Liabilities + Equity
+ * Reports per currency. Mixing currencies into a single total is
+ * meaningless — MWK and ZMW cannot be added together.
  *
- * Account type mapping (from AccountClassifier):
- *   Assets:      user_wallet, escrow, guarantee
- *   Liabilities: partner
- *   Equity:      system
+ * All accounts are normal=credit in this ledger.
+ * Positive balance = net credit (liability owed or income earned).
+ * Negative balance = net debit (e.g. POOL after disbursement).
  *
- * Source: account_balances for current; journal_entries for historical.
+ * Pre-closing treatment:
+ *   Fee (income) accounts are reclassified to equity as
+ *   unappropriated retained earnings until period close.
  *
- * Note on escrow:
- *   Escrow accounts are treated as assets here (we hold the float).
- *   In strict GAAP you would show an offsetting liability "funds held for customers."
- *   This can be added later if needed — for now, escrow balance = asset.
+ * Equation per currency: Liabilities + Equity = 0
+ * (Assets = 0 in this liability-centric ledger — no asset accounts yet.)
  */
 class BalanceSheetService
 {
@@ -39,55 +38,84 @@ class BalanceSheetService
     {
         $tb = $this->trialBalance->generate($currency, $asOf);
 
-        $sections = [
-            'asset'     => ['label' => 'Assets',       'accounts' => [], 'total' => '0.000000'],
-            'liability' => ['label' => 'Liabilities',  'accounts' => [], 'total' => '0.000000'],
-            'equity'    => ['label' => 'Equity',       'accounts' => [], 'total' => '0.000000'],
-        ];
+        // Group accounts by currency, then by section
+        $byCurrency = [];
 
         foreach ($tb['accounts'] as $account) {
             $category = $account['category'];
 
-            if (! isset($sections[$category])) {
+            // Fee (income) accounts reclassified to equity pre-closing
+            if ($category === 'income') {
+                $category = 'equity';
+            }
+
+            if (! in_array($category, ['asset', 'liability', 'equity'])) {
                 continue;
             }
 
+            $ccy     = $account['currency_code'];
             $balance = (string) ($account['balance'] ?? '0');
 
-            $sections[$category]['accounts'][] = [
+            if (! isset($byCurrency[$ccy])) {
+                $byCurrency[$ccy] = [
+                    'currency' => $ccy,
+                    'sections' => [
+                        'asset'     => ['label' => 'Assets',      'accounts' => [], 'total' => '0.000000'],
+                        'liability' => ['label' => 'Liabilities', 'accounts' => [], 'total' => '0.000000'],
+                        'equity'    => ['label' => 'Equity',      'accounts' => [], 'total' => '0.000000'],
+                    ],
+                    'totals' => [],
+                ];
+            }
+
+            $byCurrency[$ccy]['sections'][$category]['accounts'][] = [
                 'id'             => $account['id'],
                 'code'           => $account['code'],
                 'type'           => $account['type'],
-                'currency_code'  => $account['currency_code'],
+                'currency_code'  => $ccy,
                 'corridor'       => $account['corridor'],
                 'normal_balance' => $account['normal_balance'],
                 'balance'        => $balance,
             ];
 
-            $sections[$category]['total'] = bcadd(
-                $sections[$category]['total'],
+            $byCurrency[$ccy]['sections'][$category]['total'] = bcadd(
+                $byCurrency[$ccy]['sections'][$category]['total'],
                 $balance,
                 6
             );
         }
 
-        $totalAssets      = $sections['asset']['total'];
-        $totalLiabilities = $sections['liability']['total'];
-        $totalEquity      = $sections['equity']['total'];
-        $liabilitiesPlusEquity = bcadd($totalLiabilities, $totalEquity, 6);
+        // Compute per-currency totals and equation check
+        foreach ($byCurrency as $ccy => &$data) {
+            $totalAssets      = $data['sections']['asset']['total'];
+            $totalLiabilities = $data['sections']['liability']['total'];
+            $totalEquity      = $data['sections']['equity']['total'];
+            $liabPlusEquity   = bcadd($totalLiabilities, $totalEquity, 6);
+
+            $data['totals'] = [
+                'total_assets'             => $totalAssets,
+                'total_liabilities'        => $totalLiabilities,
+                'total_equity'             => $totalEquity,
+                'total_liabilities_equity' => $liabPlusEquity,
+                'equation_balanced'        => bccomp($totalAssets, $liabPlusEquity, 6) === 0,
+            ];
+        }
+        unset($data);
+
+        // Overall equation: sum of all signed balances must be zero
+        $allBalancesSum = '0.000000';
+        foreach ($tb['accounts'] as $account) {
+            $allBalancesSum = bcadd($allBalancesSum, (string) ($account['balance'] ?? '0'), 6);
+        }
+        $ledgerBalanced = bccomp($allBalancesSum, '0', 2) === 0;
 
         return [
-            'generated_at'           => Carbon::now()->toIso8601String(),
-            'as_of'                  => $asOf ?? Carbon::now()->toDateString(),
-            'currency'               => $currency,
-            'sections'               => $sections,
-            'totals'                 => [
-                'total_assets'               => $totalAssets,
-                'total_liabilities'          => $totalLiabilities,
-                'total_equity'               => $totalEquity,
-                'total_liabilities_equity'   => $liabilitiesPlusEquity,
-                'equation_balanced'          => bccomp($totalAssets, $liabilitiesPlusEquity, 6) === 0,
-            ],
+            'generated_at'   => Carbon::now()->toIso8601String(),
+            'as_of'          => $asOf ?? Carbon::now()->toDateString(),
+            'currency'       => $currency,
+            'by_currency'    => array_values($byCurrency),
+            'ledger_balanced'=> $ledgerBalanced,
+            'ledger_sum'     => $allBalancesSum,
         ];
     }
 }

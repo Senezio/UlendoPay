@@ -33,7 +33,7 @@ class TrialBalanceService
 
         foreach ($accounts as &$account) {
             $balance  = (string) $account['balance'];
-            $category = AccountClassifier::category($account['type']);
+            $category = AccountClassifier::categoryForAccount($account['type'], $account['code']);
 
             $account['category']       = $category;
             $account['category_label'] = AccountClassifier::label($category);

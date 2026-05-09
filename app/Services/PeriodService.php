@@ -147,17 +147,16 @@ class PeriodService
                 'profit_loss_snapshot'   => $pl,
                 'cash_flow_snapshot'     => $cf,
                 // Summary figures for quick display
-                'total_assets'           => $bs['totals']['total_assets'] ?? null,
-                'total_liabilities'      => $bs['totals']['total_liabilities'] ?? null,
-                'total_equity'           => $bs['totals']['total_equity'] ?? null,
+                'total_assets'           => null,
+                'total_liabilities'      => null,
+                'total_equity'           => null,
                 'net_profit'             => $pl['totals']['net_profit'] ?? null,
                 'net_cash_change'        => $cf['totals']['net_change'] ?? null,
             ]);
 
             $this->audit($closedBy, 'period.closed', $period, [
-                'total_assets'      => $period->total_assets,
-                'total_liabilities' => $period->total_liabilities,
-                'total_equity'      => $period->total_equity,
+                'ledger_balanced'   => $bs['ledger_balanced'] ?? false,
+                'ledger_sum'        => $bs['ledger_sum'] ?? null,
                 'net_profit'        => $period->net_profit,
                 'net_cash_change'   => $period->net_cash_change,
             ]);
@@ -266,18 +265,17 @@ class PeriodService
                 'locked_profit_loss'   => $pl,
                 'locked_cash_flow'     => $cf,
                 // Update summary figures from final locked snapshots
-                'total_assets'         => $bs['totals']['total_assets'] ?? $period->total_assets,
-                'total_liabilities'    => $bs['totals']['total_liabilities'] ?? $period->total_liabilities,
-                'total_equity'         => $bs['totals']['total_equity'] ?? $period->total_equity,
+                'total_assets'         => null,
+                'total_liabilities'    => null,
+                'total_equity'         => null,
                 'net_profit'           => $pl['totals']['net_profit'] ?? $period->net_profit,
                 'net_cash_change'      => $cf['totals']['net_change'] ?? $period->net_cash_change,
             ]);
 
             $this->audit($lockedBy, 'period.locked', $period, [
                 'notes'             => $notes,
-                'total_assets'      => $period->total_assets,
-                'total_liabilities' => $period->total_liabilities,
-                'total_equity'      => $period->total_equity,
+                'ledger_balanced'   => $bs['ledger_balanced'] ?? false,
+                'ledger_sum'        => $bs['ledger_sum'] ?? null,
                 'net_profit'        => $period->net_profit,
             ]);
 

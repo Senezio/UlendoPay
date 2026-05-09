@@ -46,7 +46,7 @@ class ProfitLossService
         ];
 
         foreach ($rows as $row) {
-            $category = AccountClassifier::category($row['type']);
+            $category = AccountClassifier::categoryForAccount($row['type'], $row['code']);
 
             if (! isset($sections[$category])) {
                 continue;
