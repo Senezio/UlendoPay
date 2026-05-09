@@ -122,8 +122,14 @@ class KycService
         // Sync tier with fresh instance to avoid stale cache
         app(\App\Services\TierService::class)->syncTier(\App\Models\User::find($user->id), $requestedTier);
 
-        // Compliance screen on KYC approval - AML requirement
-        app(\App\Services\Compliance\ComplianceService::class)->fullScreen($user->fresh(), "kyc_approval");
+        // Queue compliance screening via outbox - runs asynchronously to avoid request overhead
+        \App\Models\OutboxEvent::create([
+            'event_type'      => 'compliance_screening',
+            'payload'         => ['user_id' => $user->id, 'trigger' => 'kyc_approval'],
+            'status'          => 'pending',
+            'next_attempt_at' => now(),
+            'max_attempts'    => 3,
+        ]);
 
         // Notify user via SMS
         app(SmsService::class)->send([

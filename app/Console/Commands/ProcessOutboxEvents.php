@@ -62,6 +62,7 @@ class ProcessOutboxEvents extends Command
                 'refund_requested'         => $this->handleRefund($event),
                 'sms_notification'         => $this->handleSms($event),
                 'reconciliation_triggered' => $this->handleReconciliation($event),
+                'compliance_screening'     => $this->handleComplianceScreening($event),
                 default => throw new \RuntimeException(
                     "Unknown event type: {$event->event_type}"
                 ),
@@ -201,6 +202,29 @@ class ProcessOutboxEvents extends Command
             "[outbox] SMS sent for transaction: " .
             ($event->payload['reference'] ?? $event->payload['transaction_id'])
         );
+    }
+
+    private function handleComplianceScreening(OutboxEvent $event): void
+    {
+        $userId  = $event->payload['user_id'] ?? null;
+        $trigger = $event->payload['trigger'] ?? 'daily_job';
+
+        if (!$userId) {
+            throw new \RuntimeException("compliance_screening event missing user_id");
+        }
+
+        $user = \App\Models\User::find($userId);
+
+        if (!$user) {
+            throw new \RuntimeException("User {$userId} not found for compliance screening");
+        }
+
+        // Skip if user is already suspended or closed
+        if (in_array($user->status, ['suspended', 'closed'])) {
+            return;
+        }
+
+        app(\App\Services\Compliance\ComplianceService::class)->fullScreen($user, $trigger);
     }
 
     private function handleReconciliation(OutboxEvent $event): void
