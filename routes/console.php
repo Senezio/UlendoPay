@@ -85,7 +85,7 @@ Schedule::command('claims:expire')
 // Runs daily at 01:00 — re-screens all active users against sanctions/PEP lists
 // Catches users who were clean at registration but appear on updated lists
 Schedule::command('compliance:daily-screen')
-    ->dailyAt('01:00')
+    ->dailyAt('01:30')
     ->withoutOverlapping()
     ->onSuccess(function () {
         Log::info('[scheduler] compliance:daily-screen completed successfully');
