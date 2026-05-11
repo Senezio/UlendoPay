@@ -9,15 +9,17 @@ return new class extends Migration
     {
         Schema::create('sanctions_entries', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('list_reference')->nullable()->unique();
-            $table->string('name');
-            $table->string('normalized_name', 500);
-            $table->json('aliases')->nullable();
+            $table->string('source', 20);
+            $table->enum('entity_type', ['individual', 'entity']);
+            $table->text('name');
+            $table->text('normalized_name');
+            $table->json('aliases');
             $table->json('country_codes')->nullable();
             $table->date('date_of_birth')->nullable();
-            $table->string('source');
-            $table->boolean('active')->default(true);
+            $table->text('list_reference')->nullable()->unique();
             $table->json('metadata')->nullable();
+            $table->boolean('active')->default(true);
+            $table->timestamp('last_synced_at')->nullable();
             $table->timestamps();
 
             $table->index(['source', 'active']);
@@ -27,17 +29,18 @@ return new class extends Migration
 
         Schema::create('pep_entries', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('list_reference')->nullable()->unique();
-            $table->string('name');
-            $table->string('normalized_name', 500);
-            $table->json('aliases')->nullable();
-            $table->string('country_code', 3)->nullable();
-            $table->enum('risk_level', ['low', 'medium', 'high'])->default('medium');
+            $table->string('source', 20);
+            $table->text('list_reference')->nullable()->unique();
+            $table->text('name');
+            $table->text('normalized_name');
+            $table->json('aliases');
+            $table->char('country_code', 2)->nullable();
             $table->string('position')->nullable();
+            $table->enum('risk_level', ['low', 'medium', 'high'])->default('medium');
             $table->date('date_of_birth')->nullable();
-            $table->string('source');
-            $table->boolean('active')->default(true);
             $table->json('metadata')->nullable();
+            $table->boolean('active')->default(true);
+            $table->timestamp('last_synced_at')->nullable();
             $table->timestamps();
 
             $table->index(['country_code', 'active']);
@@ -63,7 +66,8 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['user_id', 'screen_type']);
-            $table->index('result');
+            $table->index(['result', 'screen_type']);
+            $table->index('triggered_by');
         });
 
         Schema::create('compliance_alerts', function (Blueprint $table) {
@@ -82,7 +86,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['user_id', 'status']);
-            $table->index('severity');
+            $table->index(['alert_type', 'status']);
         });
     }
 

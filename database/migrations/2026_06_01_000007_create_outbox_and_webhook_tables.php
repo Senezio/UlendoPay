@@ -14,11 +14,11 @@ return new class extends Migration
                 'rate_fetch_requested', 'reconciliation_triggered',
                 'internal_settlement', 'compliance_screening'
             ]);
-            $table->foreignId('transaction_id')->nullable()->constrained('transactions')->nullOnDelete();
+            $table->foreignId('transaction_id')->nullable()->constrained('transactions');
             $table->json('payload');
             $table->enum('status', ['pending', 'processing', 'completed', 'failed'])->default('pending');
-            $table->unsignedInteger('attempts')->default(0);
-            $table->unsignedInteger('max_attempts')->default(4);
+            $table->integer('attempts')->default(0);
+            $table->integer('max_attempts')->default(4);
             $table->text('failure_reason')->nullable();
             $table->timestamp('next_attempt_at')->nullable();
             $table->timestamp('processed_at')->nullable();

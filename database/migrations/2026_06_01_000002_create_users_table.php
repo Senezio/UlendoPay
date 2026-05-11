@@ -52,13 +52,15 @@ return new class extends Migration
 
         Schema::create('two_factor_auth', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->foreignId('user_id')->unique()->constrained('users')->cascadeOnDelete();
+            $table->foreignId('user_id')->unique()->constrained('users');
+            $table->text('secret_encrypted');
+            $table->text('recovery_codes_encrypted');
             $table->boolean('is_enabled')->default(false);
-            $table->text('secret_encrypted')->nullable();
-            $table->text('recovery_codes_encrypted')->nullable();
             $table->timestamp('enabled_at')->nullable();
             $table->timestamp('last_used_at')->nullable();
             $table->timestamps();
+
+            $table->index(['user_id', 'is_enabled']);
         });
 
         Schema::create('audit_logs', function (Blueprint $table) {
@@ -82,28 +84,32 @@ return new class extends Migration
 
         Schema::create('otp_codes', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-            $table->string('type');
-            $table->string('channel')->default('sms');
+            $table->foreignId('user_id')->constrained('users');
             $table->string('code_hash');
-            $table->unsignedSmallInteger('attempts')->default(0);
-            $table->timestamp('expires_at');
-            $table->timestamp('verified_at')->nullable();
+            $table->enum('type', ['phone_verification', 'login_2fa', 'password_reset', 'pin_reset']);
+            $table->string('delivery_phone', 20)->nullable();
+            $table->string('delivery_email')->nullable();
+            $table->boolean('is_used')->default(false);
+            $table->dateTime('expires_at');
+            $table->timestamp('used_at')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
-            $table->index(['user_id', 'type', 'verified_at']);
+            $table->index(['user_id', 'type', 'is_used']);
+            $table->index('expires_at');
         });
 
         Schema::create('rate_limit_buckets', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('key')->unique();
+            $table->string('key');
             $table->string('action');
-            $table->unsignedInteger('attempts')->default(0);
-            $table->timestamp('window_start');
+            $table->integer('attempts')->default(0);
+            $table->timestamp('window_start')->useCurrent()->useCurrentOnUpdate();
             $table->timestamp('blocked_until')->nullable();
-            $table->timestamps();
+            $table->timestamp('created_at')->useCurrent();
 
+            $table->unique(['key', 'action', 'window_start']);
             $table->index(['key', 'action']);
+            $table->index('blocked_until');
         });
     }
 

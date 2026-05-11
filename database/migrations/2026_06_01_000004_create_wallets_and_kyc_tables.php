@@ -21,22 +21,19 @@ return new class extends Migration
 
         Schema::create('kyc_records', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->foreignId('user_id')->constrained('users');
             $table->enum('document_type', [
-                'national_id', 'passport', 'drivers_license', 'bank_statement'
-            ])->nullable();
+                'passport', 'national_id', 'drivers_license', 'utility_bill', 'bank_statement'
+            ]);
             $table->string('document_number')->nullable();
-            $table->string('document_front_path')->nullable();
-            $table->string('document_back_path')->nullable();
-            $table->string('selfie_path')->nullable();
             $table->date('date_of_birth')->nullable();
             $table->enum('gender', ['male', 'female', 'other'])->nullable();
-            $table->enum('requested_tier', ['basic', 'standard', 'premium'])->nullable();
+            $table->string('file_path');
+            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->string('requested_tier')->nullable();
+            $table->string('rejection_reason')->nullable();
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->text('rejection_reason')->nullable();
             $table->timestamp('reviewed_at')->nullable();
-            $table->timestamp('submitted_at')->nullable();
             $table->timestamps();
 
             $table->index(['user_id', 'status']);
@@ -45,46 +42,46 @@ return new class extends Migration
         Schema::create('user_bank_accounts', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('label')->nullable();
             $table->string('bank_name');
-            $table->string('account_number');
+            $table->string('bank_code')->nullable();
+            $table->text('account_number_encrypted');
+            $table->string('account_number_masked', 20);
             $table->string('account_name');
             $table->string('branch_code')->nullable();
             $table->string('currency_code', 3);
             $table->string('country_code', 3);
-            $table->boolean('is_verified')->default(false);
+            $table->boolean('is_default')->default(false);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
-
-            $table->index(['user_id', 'is_active']);
         });
 
         Schema::create('transfer_tiers', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('name')->unique();
-            $table->unsignedTinyInteger('level')->default(1);
+            $table->unsignedTinyInteger('level')->default(0);
+            $table->string('label');
             $table->decimal('daily_limit', 20, 6);
             $table->decimal('monthly_limit', 20, 6);
-            $table->decimal('per_tx_limit', 20, 6);
-            $table->decimal('min_tx_amount', 20, 6)->default(0);
-            $table->string('limit_currency', 3)->default('MWK');
+            $table->decimal('per_transaction_limit', 20, 6);
             $table->decimal('fee_discount_percent', 5, 2)->default(0);
+            $table->string('limit_currency', 3)->default('USD');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+
+            $table->index('level');
         });
 
         Schema::create('referrals', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->foreignId('referrer_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('referred_id')->constrained('users')->cascadeOnDelete();
-            $table->string('referral_code', 10);
-            $table->enum('status', ['pending', 'completed', 'expired'])->default('pending');
-            $table->decimal('bonus_amount', 20, 6)->nullable();
-            $table->string('currency_code', 3)->nullable();
-            $table->timestamp('completed_at')->nullable();
+            $table->enum('status', ['pending', 'qualified', 'rewarded'])->default('pending');
+            $table->decimal('referrer_discount_percent', 5, 2)->default(0);
+            $table->decimal('referred_discount_percent', 5, 2)->default(0);
+            $table->timestamp('qualified_at')->nullable();
+            $table->timestamp('rewarded_at')->nullable();
             $table->timestamps();
-
-            $table->unique('referred_id');
-            $table->index('referrer_id');
         });
 
         Schema::create('idempotency_keys', function (Blueprint $table) {
@@ -100,8 +97,9 @@ return new class extends Migration
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
-            $table->index(['key', 'user_id']);
+            $table->index(['user_id', 'status']);
             $table->index('expires_at');
+            $table->index('locked_until');
         });
     }
 

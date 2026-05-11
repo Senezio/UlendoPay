@@ -11,25 +11,34 @@ return new class extends Migration
             $table->bigIncrements('id');
             $table->string('name');
             $table->string('code')->unique();
-            $table->enum('type', ['mobile_money', 'bank', 'card']);
+            $table->enum('type', ['mobile_money', 'bank', 'cash_pickup']);
+            $table->string('country_code', 3);
+            $table->text('api_config_encrypted')->nullable();
+            $table->integer('timeout_seconds')->default(30);
+            $table->integer('max_retries')->default(3);
+            $table->integer('retry_delay_seconds')->default(60);
+            $table->decimal('success_rate', 5, 2)->default(100.00);
+            $table->integer('avg_response_time_ms')->default(0);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('partner_corridors', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->foreignId('partner_id')->constrained('partners')->cascadeOnDelete();
+            $table->foreignId('partner_id')->constrained('partners');
             $table->string('from_currency', 3);
             $table->string('to_currency', 3);
-            $table->decimal('fee_percent', 8, 4)->default(0);
-            $table->decimal('fee_flat', 20, 6)->default(0);
-            $table->decimal('guarantee_percent', 8, 6)->default(0);
-            $table->decimal('min_amount', 20, 6)->default(0);
-            $table->decimal('max_amount', 20, 6)->default(0);
+            $table->decimal('min_amount', 20, 6);
+            $table->decimal('max_amount', 20, 6);
             $table->integer('priority')->default(1);
+            $table->decimal('fee_percent', 8, 4)->default(1.5000);
+            $table->decimal('fee_flat', 20, 6)->default(0);
+            $table->decimal('guarantee_percent', 8, 6)->default(0.005000);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 
+            $table->unique(['partner_id', 'from_currency', 'to_currency']);
             $table->index(['from_currency', 'to_currency', 'is_active']);
         });
 
@@ -63,6 +72,7 @@ return new class extends Migration
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
+            $table->unique(['from_currency', 'to_currency', 'fetched_at']);
             $table->index(['from_currency', 'to_currency', 'is_active']);
             $table->index('expires_at');
         });
@@ -74,12 +84,13 @@ return new class extends Migration
             $table->string('from_currency', 3);
             $table->string('to_currency', 3);
             $table->decimal('locked_rate', 20, 8);
-            $table->decimal('fee_percent', 8, 4)->default(0);
+            $table->decimal('fee_percent', 8, 4);
             $table->decimal('fee_flat', 20, 6)->default(0);
-            $table->decimal('guarantee_percent', 8, 6)->default(0);
+            $table->decimal('guarantee_percent', 8, 6)->default(0.005000);
             $table->decimal('send_amount', 20, 6)->nullable();
             $table->enum('status', ['active', 'used', 'expired'])->default('active');
-            $table->timestamp('expires_at');
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamp('used_at')->nullable();
             $table->timestamps();
 
             $table->index(['user_id', 'status']);

@@ -49,19 +49,20 @@ return new class extends Migration
             ]);
             $table->string('reference')->unique();
             $table->enum('status', ['pending', 'posted', 'reversed'])->default('pending');
-            $table->unsignedBigInteger('transaction_id')->nullable();
-            $table->text('description')->nullable();
+            $table->foreignId('reversal_of_group_id')->nullable()->constrained('journal_entry_groups');
+            $table->string('description')->nullable();
+            $table->boolean('is_balanced')->default(false);
             $table->timestamp('posted_at')->nullable();
-            $table->timestamps();
+            $table->timestamp('created_at')->useCurrent();
 
+            $table->index(['type', 'posted_at']);
+            $table->index(['status', 'created_at']);
             $table->index('reference');
-            $table->index(['type', 'status']);
-            $table->index('transaction_id');
         });
 
         Schema::create('journal_entries', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->foreignId('group_id')->constrained('journal_entry_groups')->cascadeOnDelete();
+            $table->foreignId('group_id')->constrained('journal_entry_groups');
             $table->foreignId('account_id')->constrained('accounts');
             $table->enum('entry_type', ['debit', 'credit']);
             $table->decimal('amount', 20, 6);
@@ -70,8 +71,9 @@ return new class extends Migration
             $table->timestamp('posted_at')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
-            $table->index(['group_id', 'account_id']);
-            $table->index('account_id');
+            $table->index(['account_id', 'posted_at']);
+            $table->index(['group_id', 'entry_type']);
+            $table->index('posted_at');
         });
 
         Schema::create('accounting_periods', function (Blueprint $table) {
@@ -110,15 +112,18 @@ return new class extends Migration
             $table->bigIncrements('id');
             $table->foreignId('account_id')->constrained('accounts');
             $table->date('snapshot_date');
-            $table->decimal('ledger_balance', 20, 6);
-            $table->decimal('calculated_balance', 20, 6);
+            $table->decimal('computed_balance', 20, 6);
+            $table->decimal('expected_balance', 20, 6);
             $table->decimal('variance', 20, 6)->default(0);
-            $table->enum('status', ['matched', 'mismatch', 'error'])->default('matched');
+            $table->enum('status', ['matched', 'mismatch', 'under_review', 'resolved'])->default('matched');
             $table->text('notes')->nullable();
-            $table->timestamps();
+            $table->foreignId('resolved_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('resolved_at')->nullable();
+            $table->timestamp('created_at')->useCurrent();
 
             $table->unique(['account_id', 'snapshot_date']);
-            $table->index(['snapshot_date', 'status']);
+            $table->index(['status', 'snapshot_date']);
+            $table->index('snapshot_date');
         });
     }
 
