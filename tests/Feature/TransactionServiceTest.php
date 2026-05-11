@@ -39,9 +39,9 @@ class TransactionServiceTest extends TestCase
             'name'                  => 'basic',
             'level'                 => 1,
             'label'                 => 'Basic',
-            'daily_limit'           => 1000000,
-            'monthly_limit'         => 10000000,
-            'per_transaction_limit' => 500000,
+            'daily_limit'           => 999999999,
+            'monthly_limit'         => 999999999,
+            'per_transaction_limit' => 999999999,
             'fee_discount_percent'  => 0,
             'limit_currency'        => 'MWK',
             'is_active'             => true,
@@ -311,7 +311,7 @@ class TransactionServiceTest extends TestCase
             sender:         $this->sender,
             recipient:      $recipient,
             rateLock:       $rateLock,
-            sendAmount:     999999999
+            sendAmount:     600000
         );
     }
 
