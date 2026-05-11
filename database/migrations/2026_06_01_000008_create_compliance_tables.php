@@ -1,6 +1,8 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -16,7 +18,7 @@ return new class extends Migration
             $table->json('aliases');
             $table->json('country_codes')->nullable();
             $table->date('date_of_birth')->nullable();
-            $table->text('list_reference')->nullable()->unique();
+            $table->text('list_reference')->nullable();
             $table->json('metadata')->nullable();
             $table->boolean('active')->default(true);
             $table->timestamp('last_synced_at')->nullable();
@@ -24,13 +26,15 @@ return new class extends Migration
 
             $table->index(['source', 'active']);
             $table->index('active');
-            $table->index('normalized_name');
         });
+
+        DB::statement('CREATE INDEX sanctions_entries_normalized_name_index ON sanctions_entries (normalized_name(191))');
+        DB::statement('CREATE UNIQUE INDEX sanctions_entries_list_reference_unique ON sanctions_entries (list_reference(191))');
 
         Schema::create('pep_entries', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('source', 20);
-            $table->text('list_reference')->nullable()->unique();
+            $table->text('list_reference')->nullable();
             $table->text('name');
             $table->text('normalized_name');
             $table->json('aliases');
@@ -45,8 +49,10 @@ return new class extends Migration
 
             $table->index(['country_code', 'active']);
             $table->index('active');
-            $table->index('normalized_name');
         });
+
+        DB::statement('CREATE INDEX pep_entries_normalized_name_index ON pep_entries (normalized_name(191))');
+        DB::statement('CREATE UNIQUE INDEX pep_entries_list_reference_unique ON pep_entries (list_reference(191))');
 
         Schema::create('compliance_screens', function (Blueprint $table) {
             $table->bigIncrements('id');
