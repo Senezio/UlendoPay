@@ -32,16 +32,18 @@ class TransactionServiceTest extends TestCase
 
         $this->service = app(TransactionService::class);
 
-        // Create a tier
+        // Create a tier – schema columns: name, level, label, daily_limit, monthly_limit,
+        // per_transaction_limit, fee_discount_percent, limit_currency, is_active
         TransferTier::create([
-            'name'              => 'basic',
-            'level'             => 1,
-            'daily_limit'       => 1000000,
-            'monthly_limit'     => 10000000,
-            'per_tx_limit'      => 500000,
-            'min_tx_amount'     => 100,
-            'fee_discount_percent' => 0,
-            'is_active'         => true,
+            'name'                  => 'basic',
+            'level'                 => 1,
+            'label'                 => 'Basic',
+            'daily_limit'           => 1000000,
+            'monthly_limit'         => 10000000,
+            'per_transaction_limit' => 500000,
+            'fee_discount_percent'  => 0,
+            'limit_currency'        => 'MWK',
+            'is_active'             => true,
         ]);
 
         // Create sender
@@ -114,10 +116,36 @@ class TransactionServiceTest extends TestCase
         Account::create(['owner_id' => null, 'owner_type' => null, 'type' => 'guarantee', 'currency_code' => 'MWK', 'code' => 'GUAR-MWK-ZMW', 'corridor' => 'MWK-ZMW', 'normal_balance' => 'credit', 'is_active' => true]);
         Account::create(['owner_id' => null, 'owner_type' => null, 'type' => 'system', 'currency_code' => 'MWK', 'code' => 'MWK-POOL', 'normal_balance' => 'credit', 'is_active' => true]);
 
-        $partner = Partner::create(['name' => 'Test', 'code' => 'TEST', 'type' => 'mobile_money', 'is_active' => true]);
-        PartnerCorridor::create(['partner_id' => $partner->id, 'from_currency' => 'MWK', 'to_currency' => 'ZMW', 'fee_percent' => 1.0, 'fee_flat' => 0, 'guarantee_percent' => 0.005, 'min_amount' => 0, 'max_amount' => 9999999, 'priority' => 1, 'is_active' => true]);
+        $partner = Partner::create([
+            'name'         => 'Test',
+            'code'         => 'TEST',
+            'type'         => 'mobile_money',
+            'country_code' => 'MWI',   // required column
+            'is_active'    => true,
+        ]);
+        PartnerCorridor::create([
+            'partner_id'        => $partner->id,
+            'from_currency'     => 'MWK',
+            'to_currency'       => 'ZMW',
+            'fee_percent'       => 1.0,
+            'fee_flat'          => 0,
+            'guarantee_percent' => 0.005,
+            'min_amount'        => 0,
+            'max_amount'        => 9999999,
+            'priority'          => 1,
+            'is_active'         => true,
+        ]);
 
-        $rate = ExchangeRate::create(['from_currency' => 'MWK', 'to_currency' => 'ZMW', 'rate' => 0.005, 'inverse_rate' => 200, 'source' => 'SYSTEM', 'is_active' => true, 'fetched_at' => now(), 'expires_at' => now()->addHours(24)]);
+        $rate = ExchangeRate::create([
+            'from_currency' => 'MWK',
+            'to_currency'   => 'ZMW',
+            'rate'          => 0.005,
+            'inverse_rate'  => 200,
+            'source'        => 'SYSTEM',
+            'is_active'     => true,
+            'fetched_at'    => now(),
+            'expires_at'    => now()->addHours(24),
+        ]);
 
         return RateLock::create([
             'user_id'           => $this->sender->id,
@@ -135,7 +163,7 @@ class TransactionServiceTest extends TestCase
 
     // ── Tests ─────────────────────────────────────────────────────────────────
 
-    #[\PHPUnit\Framework\Attributes\Test]
+    #[Test]
     public function same_currency_transfer_to_registered_user_completes_immediately(): void
     {
         // Create recipient user with MWK wallet
@@ -155,12 +183,12 @@ class TransactionServiceTest extends TestCase
         ]);
         AccountBalance::create(['account_id' => $recipientAccount->id, 'balance' => 0, 'currency_code' => 'MWK']);
 
+        // Notice: no 'currency_code' – the column doesn't exist in recipients
         $recipient = Recipient::create([
             'user_id'        => $this->sender->id,
             'full_name'      => 'Recipient',
             'mobile_number'  => '+265991000002',
             'country_code'   => 'MWI',
-            'currency_code'  => 'MWK',
             'payment_method' => 'mobile_money',
             'is_active'      => true,
         ]);
@@ -190,7 +218,7 @@ class TransactionServiceTest extends TestCase
         $this->assertEquals(2, OutboxEvent::where('event_type', 'sms_notification')->count());
     }
 
-    #[\PHPUnit\Framework\Attributes\Test]
+    #[Test]
     public function same_currency_transfer_to_unregistered_user_creates_pending_claim(): void
     {
         $recipient = Recipient::create([
@@ -198,7 +226,6 @@ class TransactionServiceTest extends TestCase
             'full_name'      => 'Unknown Person',
             'mobile_number'  => '+265991999999',
             'country_code'   => 'MWI',
-            'currency_code'  => 'MWK',
             'payment_method' => 'mobile_money',
             'is_active'      => true,
         ]);
@@ -223,7 +250,7 @@ class TransactionServiceTest extends TestCase
         $this->assertEquals(495000, $senderBalance);
     }
 
-    #[\PHPUnit\Framework\Attributes\Test]
+    #[Test]
     public function cross_currency_transfer_goes_to_escrowed_status(): void
     {
         $recipient = Recipient::create([
@@ -231,7 +258,6 @@ class TransactionServiceTest extends TestCase
             'full_name'           => 'ZMW Recipient',
             'mobile_number'       => '+260971000001',
             'country_code'        => 'ZMB',
-            'currency_code'       => 'ZMW',
             'payment_method'      => 'mobile_money',
             'bank_account_number' => null,
             'is_active'           => true,
@@ -262,7 +288,7 @@ class TransactionServiceTest extends TestCase
         $this->assertEquals(400000, $senderBalance);
     }
 
-    #[\PHPUnit\Framework\Attributes\Test]
+    #[Test]
     public function insufficient_balance_throws_exception(): void
     {
         $recipient = Recipient::create([
@@ -270,7 +296,6 @@ class TransactionServiceTest extends TestCase
             'full_name'      => 'Test',
             'mobile_number'  => '+265991000003',
             'country_code'   => 'MWI',
-            'currency_code'  => 'MWK',
             'payment_method' => 'mobile_money',
             'is_active'      => true,
         ]);
@@ -289,7 +314,7 @@ class TransactionServiceTest extends TestCase
         );
     }
 
-    #[\PHPUnit\Framework\Attributes\Test]
+    #[Test]
     public function idempotency_returns_same_transaction_on_retry(): void
     {
         $recipientUser = User::create([
@@ -313,7 +338,6 @@ class TransactionServiceTest extends TestCase
             'full_name'      => 'Recipient2',
             'mobile_number'  => '+265991000004',
             'country_code'   => 'MWI',
-            'currency_code'  => 'MWK',
             'payment_method' => 'mobile_money',
             'is_active'      => true,
         ]);
@@ -330,7 +354,7 @@ class TransactionServiceTest extends TestCase
         $this->assertEquals(495000, $balance);
     }
 
-    #[\PHPUnit\Framework\Attributes\Test]
+    #[Test]
     public function complete_releases_escrow_to_pool(): void
     {
         $recipient = Recipient::create([
@@ -338,7 +362,6 @@ class TransactionServiceTest extends TestCase
             'full_name'      => 'ZMW Recipient2',
             'mobile_number'  => '+260971000002',
             'country_code'   => 'ZMB',
-            'currency_code'  => 'ZMW',
             'payment_method' => 'mobile_money',
             'is_active'      => true,
         ]);
@@ -360,7 +383,7 @@ class TransactionServiceTest extends TestCase
         $this->assertGreaterThan(0, $poolBalance);
     }
 
-    #[\PHPUnit\Framework\Attributes\Test]
+    #[Test]
     public function reverse_refunds_full_amount_to_sender(): void
     {
         $recipient = Recipient::create([
@@ -368,7 +391,6 @@ class TransactionServiceTest extends TestCase
             'full_name'      => 'ZMW Recipient3',
             'mobile_number'  => '+260971000003',
             'country_code'   => 'ZMB',
-            'currency_code'  => 'ZMW',
             'payment_method' => 'mobile_money',
             'is_active'      => true,
         ]);
