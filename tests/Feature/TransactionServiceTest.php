@@ -16,11 +16,13 @@ use App\Models\Wallet;
 use App\Models\ExchangeRate;
 use App\Services\TransactionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnitFrameworkAttributesTest;
 use Tests\TestCase;
 
 class TransactionServiceTest extends TestCase
 {
     use RefreshDatabase;
+use PHPUnitFrameworkAttributesTest;
 
     private TransactionService $service;
     private User $sender;
