@@ -81,8 +81,9 @@ Schedule::command('claims:expire')
         Log::error('[scheduler] claims:expire FAILED');
     });
 
+
 // ── Compliance: Daily user re-screen ─────────────────────────────────────────
-// Runs daily at 01:00 — re-screens all active users against sanctions/PEP lists
+// Runs daily at 01:30 — re-screens all active users against sanctions/PEP lists
 // Catches users who were clean at registration but appear on updated lists
 Schedule::command('compliance:daily-screen')
     ->dailyAt('01:30')
@@ -91,12 +92,17 @@ Schedule::command('compliance:daily-screen')
         Log::info('[scheduler] compliance:daily-screen completed successfully');
     })
     ->onFailure(function () {
-        Log::error('[scheduler] compliance:daily-screen FAILED — users may not be re-screened');
+        Log::error('[scheduler] compliance:daily-screen FAILED');
     });
+
+// ── PawaPay Sync ─────────────────────────────────────────────────────────────
+// Sync PawaPay correspondents weekly to update limits and active status
+Schedule::command('pawapay:sync-correspondents')
+    ->weekly()
+    ->withoutOverlapping();
 
 // ── Compliance: Sync sanctions + PEP lists ───────────────────────────────────
 // Runs weekly on Sunday at 00:00 — pulls latest data from OpenSanctions
-// Daily screen runs after this so users are screened against fresh lists
 Schedule::command('compliance:sync-lists')
     ->weeklyOn(0, '00:00')
     ->withoutOverlapping()
@@ -104,5 +110,5 @@ Schedule::command('compliance:sync-lists')
         Log::info('[scheduler] compliance:sync-lists completed successfully');
     })
     ->onFailure(function () {
-        Log::error('[scheduler] compliance:sync-lists FAILED — sanctions list may be stale');
+        Log::error('[scheduler] compliance:sync-lists FAILED');
     });

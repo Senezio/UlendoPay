@@ -86,7 +86,7 @@ return new class extends Migration
             $table->bigIncrements('id');
             $table->foreignId('user_id')->constrained('users');
             $table->string('code_hash');
-            $table->enum('type', ['phone_verification', 'login_2fa', 'password_reset', 'pin_reset']);
+            $table->enum('type', ['phone_verification', 'login_2fa', 'password_reset', 'pin_reset', 'login_verification']);
             $table->string('delivery_phone', 20)->nullable();
             $table->string('delivery_email')->nullable();
             $table->boolean('is_used')->default(false);

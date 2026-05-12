@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AuthCredentialController;
+use App\Http\Controllers\Api\AuthRegistrationController;
 use App\Http\Controllers\Api\AuthTwoFactorController;
 use App\Http\Controllers\Api\AuthSessionController;
 use App\Http\Controllers\Api\AuthLookupController;
@@ -31,44 +33,34 @@ Route::prefix('v1')->group(function () {
 
     // ── Public auth routes ───────────────────────────────────────────────────
     Route::prefix('auth')->group(function () {
-        Route::post('/register',        [AuthController::class, 'register'])->middleware('throttle:otp');
-        Route::post('/verify-phone',    [AuthController::class, 'verifyPhone']);
+        Route::post('/register',        [AuthRegistrationController::class, 'register'])->middleware('throttle:otp');
+        Route::post('/verify-phone',    [AuthRegistrationController::class, 'verifyPhone']);
+        Route::post('/resend-otp',      [AuthRegistrationController::class, 'resendOtp']);
         Route::post('/login',           [AuthController::class, 'login']);
         Route::post('/verify-login',    [AuthController::class, 'verifyLogin']);
         Route::post('/verify-totp',     [AuthController::class, 'verifyTotp']);
-        Route::post('/forgot-pin',      [AuthController::class, 'forgotPin'])->middleware('throttle:otp');
-        Route::post('/reset-pin',       [AuthController::class, 'resetPin']);
-        Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:otp');
-        Route::post('/reset-password',  [AuthController::class, 'resetPassword']);
-        Route::post('/resend-otp',      [AuthController::class, 'resendOtp']);
+        Route::post('/forgot-pin',      [AuthCredentialController::class, 'forgotPin'])->middleware('throttle:otp');
+        Route::post('/reset-pin',       [AuthCredentialController::class, 'resetPin']);
+        Route::post('/forgot-password', [AuthCredentialController::class, 'forgotPassword'])->middleware('throttle:otp');
+        Route::post('/reset-password',  [AuthCredentialController::class, 'resetPassword']);
     });
 
     Route::post('/contact', [\App\Http\Controllers\Api\PublicController::class, 'contact'])->middleware('throttle:6,1');
 
     // ── Webhooks — public, secured via per-provider verification ────────────
-    //
-    // PawaPay: HMAC-SHA256 signature on raw body (X-Pawapay-Signature header)
-    // MTN MoMo: verify-by-polling — status confirmed via MTN API callback
-    //
-    // Configure these URLs in each provider's dashboard:
-    //   PawaPay deposits  → /api/v1/topup/webhook/pawapay
-    //   PawaPay payouts   → /api/v1/withdraw/webhook/pawapay
-    //   MTN collections   → /api/v1/topup/webhook/mtn
-    //   MTN disbursements → /api/v1/withdraw/webhook/mtn
-    //
     Route::post('/topup/webhook/pawapay',    [TopUpController::class, 'pawapayWebhook']);
     Route::post('/topup/webhook/mtn',        [TopUpController::class, 'mtnWebhook']);
     Route::post('/withdraw/webhook/pawapay', [WithdrawalController::class, 'pawapayWebhook']);
     Route::post('/withdraw/webhook/mtn',     [WithdrawalController::class, 'mtnWebhook']);
 
-    // Legacy webhook routes — kept for backward compatibility with older integrations
+    // Legacy webhook routes
     Route::post('/topup/webhook',    [TopUpController::class, 'webhook']);
     Route::post('/withdraw/webhook', [WithdrawalController::class, 'webhook']);
 
-    // KYC document serve — secured via signed token
+    // KYC document serve
     Route::get('/kyc/document/{id}', [KycController::class, 'document'])->name('kyc.document');
 
-    // Fee calculator — public, no auth required
+    // Fee calculator
     Route::get('/calculator', [\App\Http\Controllers\Api\CalculatorController::class, 'calculate']);
 
     // ── Authenticated routes ─────────────────────────────────────────────────
@@ -92,9 +84,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/auth/2fa/status',   [AuthTwoFactorController::class, 'status']);
 
         // Lookup
-        Route::get('/users/lookup',          [AuthLookupController::class, 'lookup'])->middleware('throttle:lookup');
-        Route::get('/wallets/lookup',        [AuthLookupController::class, 'walletLookup']);
-        Route::get('/auth/account-numbers',  [AuthLookupController::class, 'accountNumbers']);
+        Route::get('/users/lookup',         [AuthLookupController::class, 'lookup'])->middleware('throttle:lookup');
+        Route::get('/wallets/lookup',       [AuthLookupController::class, 'walletLookup']);
+        Route::get('/auth/account-numbers', [AuthLookupController::class, 'accountNumbers']);
 
         // Transfer tiers
         Route::get('/tier',           [\App\Http\Controllers\Api\TierController::class, 'show']);
