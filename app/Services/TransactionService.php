@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Account;
 use App\Models\OutboxEvent;
-use App\Models\PendingClaim;
 use App\Models\RateLock;
 use App\Models\Recipient;
 use App\Models\Transaction;
@@ -13,32 +12,56 @@ use App\Services\IdempotencyService;
 use App\Services\LedgerService;
 use App\Services\TierService;
 use App\Services\FraudDetectionService;
+use App\Services\Transfers\CrossCurrencyHandler;
+use App\Services\Transfers\FeeCalculator;
+use App\Services\Transfers\PendingClaimHandler;
+use App\Services\Transfers\SameCurrencyDirectHandler;
+use App\Services\Transfers\TransactionContext;
+use App\Services\Transfers\TransactionValidator;
+use App\Services\Transfers\WalletTransferHandler;
+use App\Services\Transfers\Contracts\TransferHandlerInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Carbon;
 
 class TransactionService
 {
+    /** @var TransferHandlerInterface[] */
+    private array $handlers;
+
     public function __construct(
-        private LedgerService         $ledger,
-        private IdempotencyService    $idempotency,
-        private FraudDetectionService $fraud
-    ) {}
+        private LedgerService            $ledger,
+        private IdempotencyService       $idempotency,
+        private FraudDetectionService    $fraud,
+        private FeeCalculator            $fees,
+        private TransactionValidator     $validator,
+        private WalletTransferHandler    $walletHandler,
+        private SameCurrencyDirectHandler $directHandler,
+        private PendingClaimHandler      $claimHandler,
+        private CrossCurrencyHandler     $crossHandler,
+    ) {
+        // Order matters — wallet and direct/claim are checked before cross-currency
+        $this->handlers = [
+            $this->walletHandler,
+            $this->directHandler,
+            $this->claimHandler,
+            $this->crossHandler,
+        ];
+    }
 
     /**
      * Initiate a transfer.
      *
-     * This is the entry point from the controller.
-     * It is fully idempotent — safe to retry with same key.
+     * Fully idempotent — safe to retry with the same key.
      *
      * Steps:
      *   1. Acquire idempotency lock
      *   2. Validate inputs
      *   3. Check sender balance
-     *   4. Create transaction record
-     *   5. Post Group 1 journal entries (escrow)
-     *   6. Queue disbursement via outbox
-     *   7. Release idempotency lock as completed
+     *   4. Run fraud detection
+     *   5. Build TransactionContext
+     *   6. Resolve and invoke the correct handler
+     *   7. Mark idempotency key as completed
      */
     public function initiate(
         string    $idempotencyKey,
@@ -66,7 +89,6 @@ class TransactionService
         );
 
         if ($lock['status'] === 'completed') {
-            // Already processed — return the cached transaction
             return Transaction::find($lock['response']['transaction_id']);
         }
 
@@ -85,40 +107,14 @@ class TransactionService
                 $sender, $recipient, $rateLock, $sendAmount
             ) {
                 // ── 2. Validate inputs ───────────────────────────────────
-                // Check tier limits
-                app(TierService::class)->checkLimits($sender, $sendAmount, $rateLock->from_currency);
-
-                if ($rateLock->status !== 'active') {
-                    throw new \RuntimeException('Rate lock is no longer active.');
-                }
-                if ($rateLock->expires_at->isPast()) {
-                    throw new \RuntimeException('Rate lock has expired.');
-                }
-                if ($rateLock->user_id !== $sender->id) {
-                    throw new \RuntimeException('Rate lock does not belong to this user.');
-                }
-                if (! $recipient->is_active || $recipient->user_id !== $sender->id) {
-                    throw new \RuntimeException('Invalid recipient.');
-                }
+                $this->validator->validate($sender, $recipient, $rateLock, $sendAmount);
 
                 $sendCurrency    = $rateLock->from_currency;
                 $receiveCurrency = $rateLock->to_currency;
                 $lockedRate      = $rateLock->locked_rate;
+                $isSameCurrency  = $sendCurrency === $receiveCurrency;
 
-                $isSameCurrency = $sendCurrency === $receiveCurrency;
-
-                // Fee calculation
-                $rawFee          = $isSameCurrency ? 0.0 : $this->calculateFee($sendAmount, $rateLock);
-                $feeAmount       = $isSameCurrency ? 0.0 : app(TierService::class)->effectiveFee($sender, $rawFee);
-                $guaranteeAmount = $isSameCurrency ? 0.0 : $this->calculateGuarantee($sendAmount, $sendCurrency, $receiveCurrency, $rateLock->guarantee_percent ?? null);
-                $escrowAmount    = $sendAmount - $feeAmount - $guaranteeAmount;
-                $receiveAmount   = round($escrowAmount * $lockedRate, 6);
-
-                if ($escrowAmount <= 0) {
-                    throw new \RuntimeException('Send amount is too small to cover fees.');
-                }
-
-                // ── 3. Check sender balance (with row lock) ──────────────
+                // ── 3. Check sender balance ──────────────────────────────
                 $senderAccount = Account::where('owner_id', $sender->id)
                     ->where('owner_type', User::class)
                     ->where('type', 'user_wallet')
@@ -134,376 +130,72 @@ class TransactionService
                     );
                 }
 
-                if (!$isSameCurrency) {
-                    $escrowAccount    = Account::where('type', 'escrow')
-                        ->where('currency_code', $sendCurrency)->firstOrFail();
-                    $feeAccount       = Account::where('type', 'fee')
-                        ->where('currency_code', $sendCurrency)->firstOrFail();
-                    $guaranteeAccount = Account::where('type', 'guarantee')
-                        ->where('corridor', "{$sendCurrency}-{$receiveCurrency}")
-                        ->where('currency_code', $sendCurrency)->firstOrFail();
-                }
-
-                // ── 3b. Fraud detection ─────────────────────────────────
+                // ── 4. Fraud detection ───────────────────────────────────
                 $fraudAnalysis = $this->fraud->analyse(
-                    $sender,
-                    $recipient,
-                    $sendAmount,
-                    $sendCurrency ?? $rateLock->from_currency
+                    $sender, $recipient, $sendAmount, $sendCurrency
                 );
 
-                // ── 4. Create transaction record ─────────────────────────
-                $reference = $this->generateReference();
+                // ── 5. Compute amounts and build context ─────────────────
+                $feeAmount       = $isSameCurrency ? 0.0 : $this->fees->effectiveFee($sendAmount, $rateLock, $sender);
+                $guaranteeAmount = $isSameCurrency ? 0.0 : $this->fees->guarantee($sendAmount, $sendCurrency, $receiveCurrency, $rateLock->guarantee_percent ?? null);
+                $escrowAmount    = $sendAmount - $feeAmount - $guaranteeAmount;
+                $receiveAmount   = round($escrowAmount * $lockedRate, 6);
 
-                $transaction = Transaction::create([
-                    'reference_number'       => $reference,
-                    'sender_id'              => $sender->id,
-                    'recipient_id'           => $recipient->id,
-                    'rate_lock_id'           => $rateLock->id,
-                    'send_amount'            => $sendAmount,
-                    'send_currency'          => $sendCurrency,
-                    'receive_amount'         => $receiveAmount,
-                    'receive_currency'       => $receiveCurrency,
-                    'locked_rate'            => $lockedRate,
-                    'fee_amount'             => $feeAmount,
-                    'guarantee_contribution' => $guaranteeAmount,
-                    'status'                 => 'initiated',
-                    'flagged_for_review'     => $fraudAnalysis['flagged'],
-                    'risk_score'             => $fraudAnalysis['score'],
-                    'fraud_context'          => $fraudAnalysis['triggered_rules'],
-                ]);
-
-                // Create fraud alert if flagged
-                if ($fraudAnalysis['flagged']) {
-                    $this->fraud->createAlert($transaction, $fraudAnalysis);
+                if ($escrowAmount <= 0) {
+                    throw new \RuntimeException('Send amount is too small to cover fees.');
                 }
 
-                if ($recipient->payment_method === 'wallet_transfer') {
-                    // ── Wallet-to-wallet: credit by account number ────────
-                    $recipientAccount = Account::where('code', $recipient->wallet_account)
-                        ->where('type', 'user_wallet')
-                        ->where('is_active', true)
-                        ->first();
+                $reference = 'ULP-' . Carbon::now()->format('Ymd') . '-' . strtoupper(Str::random(6));
 
-                    if (!$recipientAccount) {
-                        throw new \RuntimeException(
-                            "Wallet account {$recipient->wallet_account} not found or inactive."
-                        );
-                    }
+                // Pre-fetch once — handlers read from ctx, no repeated queries
+                $resolvedRecipientUser = null;
+                if ($isSameCurrency && $recipient->payment_method !== 'wallet_transfer') {
+                    $phoneHash = hash('sha256', $recipient->mobile_number);
+                    $resolvedRecipientUser = \App\Models\User::where('phone_hash', $phoneHash)->first();
+                }
 
-                    if ($recipientAccount->currency_code !== $receiveCurrency) {
-                        throw new \RuntimeException(
-                            "Wallet account currency does not match the selected destination currency."
-                        );
-                    }
+                $ctx = new TransactionContext(
+                    sender:                $sender,
+                    recipient:             $recipient,
+                    rateLock:              $rateLock,
+                    sendAmount:            $sendAmount,
+                    receiveAmount:         $receiveAmount,
+                    feeAmount:             $feeAmount,
+                    guaranteeAmount:       $guaranteeAmount,
+                    escrowAmount:          $escrowAmount,
+                    sendCurrency:          $sendCurrency,
+                    receiveCurrency:       $receiveCurrency,
+                    lockedRate:            $lockedRate,
+                    isSameCurrency:        $isSameCurrency,
+                    reference:             $reference,
+                    resolvedRecipientUser: $resolvedRecipientUser,
+                );
 
-                    $group = $this->ledger->post(
-                        reference:   "TXN-{$reference}-WALLET",
-                        type:        'transfer_initiation',
-                        currency:    $sendCurrency,
-                        entries: [
-                            [
-                                'account_id'  => $senderAccount->id,
-                                'type'        => 'debit',
-                                'amount'      => $sendAmount,
-                                'description' => "Wallet transfer {$reference}",
-                            ],
-                            [
-                                'account_id'  => $recipientAccount->id,
-                                'type'        => 'credit',
-                                'amount'      => $receiveAmount,
-                                'description' => "Wallet transfer received {$reference}",
-                            ],
-                        ],
-                        description: "Wallet-to-wallet transfer {$reference}"
-                    );
+                // ── 6. Resolve handler and execute ───────────────────────
+                $handler = $this->resolveHandler($ctx);
+                $transaction = $handler->handle($ctx);
 
-                    $transaction->update([
-                        'journal_entry_group_id' => $group->id,
-                        'status'                 => 'completed',
-                        'escrowed_at'            => Carbon::now(),
-                        'completed_at'           => Carbon::now(),
-                    ]);
+                // Attach fraud analysis result to transaction
+                $transaction->update([
+                    'flagged_for_review' => $fraudAnalysis['flagged'],
+                    'risk_score'         => $fraudAnalysis['score'],
+                    'fraud_context'      => $fraudAnalysis['triggered_rules'],
+                ]);
 
-                    $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
-
-                    app(TierService::class)->qualifyReferral($sender);
-
-                    $recipientUser = User::find($recipientAccount->owner_id);
-
-                    OutboxEvent::create([
-                        'event_type'     => 'sms_notification',
-                        'transaction_id' => $transaction->id,
-                        'payload'        => [
-                            'type'      => 'transfer_sent',
-                            'reference' => $reference,
-                            'amount'    => $sendAmount,
-                            'currency'  => $sendCurrency,
-                            'phone'     => $sender->phone,
-                        ],
-                        'status'          => 'pending',
-                        'next_attempt_at' => Carbon::now(),
-                    ]);
-
-                    if ($recipientUser) {
-                        OutboxEvent::create([
-                            'event_type'     => 'sms_notification',
-                            'transaction_id' => $transaction->id,
-                            'payload'        => [
-                                'type'      => 'transfer_received',
-                                'reference' => $reference,
-                                'amount'    => $receiveAmount,
-                                'currency'  => $receiveCurrency,
-                                'phone'     => $recipientUser->phone,
-                            ],
-                            'status'          => 'pending',
-                            'next_attempt_at' => Carbon::now(),
-                        ]);
-                    }
-
-                } elseif ($isSameCurrency) {
-                    // ── Same-currency transfer ───────────────────────────
-                    $recipientPhoneHash = hash('sha256', $recipient->mobile_number);
-                    $recipientUser      = User::where('phone_hash', $recipientPhoneHash)->first();
-
-                    if ($recipientUser) {
-    
-                        $recipientAccount = Account::where('owner_id', $recipientUser->id)
-                            ->where('owner_type', User::class)
-                            ->where('type', 'user_wallet')
-                            ->where('currency_code', $receiveCurrency)
-                            ->first();
-
-                        if (!$recipientAccount) {
-                            throw new \RuntimeException(
-                                "Recipient does not have a {$receiveCurrency} wallet."
-                            );
-                        }
-
-                        $group = $this->ledger->post(
-                            reference:   "TXN-{$reference}-DIRECT",
-                            type:        'transfer_initiation',
-                            currency:    $sendCurrency,
-                            entries: [
-                                [
-                                    'account_id'  => $senderAccount->id,
-                                    'type'        => 'debit',
-                                    'amount'      => $sendAmount,
-                                    'description' => "Direct transfer {$reference}",
-                                ],
-                                [
-                                    'account_id'  => $recipientAccount->id,
-                                    'type'        => 'credit',
-                                    'amount'      => $receiveAmount,
-                                    'description' => "Received transfer {$reference}",
-                                ],
-                            ],
-                            description: "Same-currency transfer {$reference}"
-                        );
-
-                        $transaction->update([
-                            'journal_entry_group_id' => $group->id,
-                            'status'                 => 'completed',
-                            'escrowed_at'            => Carbon::now(),
-                            'completed_at'           => Carbon::now(),
-                        ]);
-
-                        $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
-
-                        // Qualify referral on first transaction
-                        app(TierService::class)->qualifyReferral($sender);
-
-                        // SMS to sender
-                        OutboxEvent::create([
-                            'event_type'     => 'sms_notification',
-                            'transaction_id' => $transaction->id,
-                            'payload'        => [
-                                'type'      => 'transfer_sent',
-                                'reference' => $reference,
-                                'amount'    => $sendAmount,
-                                'currency'  => $sendCurrency,
-                                'phone'     => $sender->phone,
-                            ],
-                            'status'          => 'pending',
-                            'next_attempt_at' => Carbon::now(),
-                        ]);
-
-                        // SMS to recipient
-                        OutboxEvent::create([
-                            'event_type'     => 'sms_notification',
-                            'transaction_id' => $transaction->id,
-                            'payload'        => [
-                                'type'      => 'transfer_received',
-                                'reference' => $reference,
-                                'amount'    => $receiveAmount,
-                                'currency'  => $receiveCurrency,
-                                'phone'     => $recipientUser->phone,
-                            ],
-                            'status'          => 'pending',
-                            'next_attempt_at' => Carbon::now(),
-                        ]);
-
-                    } else {
-                        $escrowAccount = Account::where('type', 'escrow')
-                            ->where('currency_code', $sendCurrency)->firstOrFail();
-
-                        $group = $this->ledger->post(
-                            reference:   "TXN-{$reference}-HOLD",
-                            type:        'transfer_initiation',
-                            currency:    $sendCurrency,
-                            entries: [
-                                [
-                                    'account_id'  => $senderAccount->id,
-                                    'type'        => 'debit',
-                                    'amount'      => $sendAmount,
-                                    'description' => "Transfer hold for unregistered recipient {$reference}",
-                                ],
-                                [
-                                    'account_id'  => $escrowAccount->id,
-                                    'type'        => 'credit',
-                                    'amount'      => $sendAmount,
-                                    'description' => "Held pending claim {$reference}",
-                                ],
-                            ],
-                            description: "Pending claim transfer {$reference}"
-                        );
-
-                        $transaction->update([
-                            'journal_entry_group_id' => $group->id,
-                            'status'                 => 'pending_claim',
-                            'escrowed_at'            => Carbon::now(),
-                        ]);
-
-                        $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
-
-                        // Create pending claim record
-                        $maskedPhone = substr($recipient->mobile_number, 0, 4)
-                            . str_repeat('*', max(0, strlen($recipient->mobile_number) - 7))
-                            . substr($recipient->mobile_number, -3);
-
-                        PendingClaim::create([
-                            'transaction_id'        => $transaction->id,
-                            'recipient_phone_hash'  => $recipientPhoneHash,
-                            'recipient_phone_masked'=> $maskedPhone,
-                            'amount'               => $sendAmount,
-                            'currency_code'        => $sendCurrency,
-                            'status'               => 'pending',
-                            'expires_at'           => Carbon::now()->addHours(48),
-                        ]);
-
-                        // SMS to sender confirming hold
-                        OutboxEvent::create([
-                            'event_type'     => 'sms_notification',
-                            'transaction_id' => $transaction->id,
-                            'payload'        => [
-                                'type'      => 'transfer_held',
-                                'reference' => $reference,
-                                'amount'    => $sendAmount,
-                                'currency'  => $sendCurrency,
-                                'phone'     => $sender->phone,
-                            ],
-                            'status'          => 'pending',
-                            'next_attempt_at' => Carbon::now(),
-                        ]);
-
-                        // SMS to unregistered recipient
-                        OutboxEvent::create([
-                            'event_type'     => 'sms_notification',
-                            'transaction_id' => $transaction->id,
-                            'payload'        => [
-                                'type'        => 'pending_claim',
-                                'reference'   => $reference,
-                                'amount'      => $sendAmount,
-                                'currency'    => $sendCurrency,
-                                'phone'       => $recipient->mobile_number,
-                                'expires_at'  => Carbon::now()->addHours(48)->toDateTimeString(),
-                            ],
-                            'status'          => 'pending',
-                            'next_attempt_at' => Carbon::now(),
-                        ]);
-                    }
-
-                } else {
-                    $group = $this->ledger->post(
-                        reference:   "TXN-{$reference}-INIT",
-                        type:        'transfer_initiation',
-                        currency:    $sendCurrency,
-                        entries: [
-                            [
-                                'account_id'  => $senderAccount->id,
-                                'type'        => 'debit',
-                                'amount'      => $sendAmount,
-                                'description' => "Transfer initiation {$reference}",
-                            ],
-                            [
-                                'account_id'  => $escrowAccount->id,
-                                'type'        => 'credit',
-                                'amount'      => $escrowAmount,
-                                'description' => "Escrow for {$reference}",
-                            ],
-                            [
-                                'account_id'  => $feeAccount->id,
-                                'type'        => 'credit',
-                                'amount'      => $feeAmount,
-                                'description' => "Fee for {$reference}",
-                            ],
-                            [
-                                'account_id'  => $guaranteeAccount->id,
-                                'type'        => 'credit',
-                                'amount'      => $guaranteeAmount,
-                                'description' => "Guarantee contribution for {$reference}",
-                            ],
-                        ],
-                        description: "Initiation of transfer {$reference}"
-                    );
-
-                    $transaction->update([
-                        'journal_entry_group_id' => $group->id,
-                        'status'                 => 'escrowed',
-                        'escrowed_at'            => Carbon::now(),
-                    ]);
-
-                    $rateLock->update(['status' => 'used', 'used_at' => Carbon::now()]);
-
-                    // Queue cross-currency internal settlement via outbox.
-                    OutboxEvent::create([
-                        'event_type'     => 'internal_settlement',
-                        'transaction_id' => $transaction->id,
-                        'payload'        => [
-                            'transaction_id' => $transaction->id,
-                            'reference'      => $reference,
-                        ],
-                        'status'          => 'pending',
-                        'next_attempt_at' => Carbon::now(),
-                        'max_attempts'    => 5,
-                    ]);
-
-                    // SMS to sender confirming initiation
-                    OutboxEvent::create([
-                        'event_type'     => 'sms_notification',
-                        'transaction_id' => $transaction->id,
-                        'payload'        => [
-                            'type'      => 'transfer_sent',
-                            'phone'     => $sender->phone,
-                            'amount'    => $sendAmount,
-                            'currency'  => $sendCurrency,
-                            'reference' => $reference,
-                        ],
-                        'status'          => 'pending',
-                        'next_attempt_at' => Carbon::now(),
-                    ]);
+                if ($fraudAnalysis['flagged']) {
+                    $this->fraud->createAlert($transaction, $fraudAnalysis);
                 }
 
                 return $transaction;
             });
 
-            // ── Mark idempotency key as completed ────────────────────────
+            // ── 7. Mark idempotency key as completed ─────────────────────
             $this->idempotency->complete($idempotencyRecord, [
-                'transaction_id'       => $transaction->id,
-                'reference_number'     => $transaction->reference_number,
-                'status'               => $transaction->status,
-                'receive_amount'       => $transaction->receive_amount,
-                'receive_currency'     => $transaction->receive_currency,
+                'transaction_id'   => $transaction->id,
+                'reference_number' => $transaction->reference_number,
+                'status'           => $transaction->status,
+                'receive_amount'   => $transaction->receive_amount,
+                'receive_currency' => $transaction->receive_currency,
             ], 201);
 
             return $transaction;
@@ -515,20 +207,32 @@ class TransactionService
     }
 
     /**
+     * Resolve the correct handler for this transfer context.
+     * Throws if no handler claims the context — which means
+     * a new transfer type was added without a handler.
+     */
+    private function resolveHandler(TransactionContext $ctx): TransferHandlerInterface
+    {
+        foreach ($this->handlers as $handler) {
+            if ($handler->supports($ctx)) {
+                return $handler;
+            }
+        }
+
+        throw new \RuntimeException(
+            "No handler found for transfer: {$ctx->sendCurrency} -> {$ctx->receiveCurrency}, " .
+            "method: {$ctx->recipient->payment_method}"
+        );
+    }
+
+    /**
      * Complete a transaction after partner confirms disbursement.
      * Called by the outbox worker.
-     *
-     * Posts Group 2: Debit escrow → Credit send-currency POOL
-     * The partner disburses from their own float in the receive currency.
-     * UlendoPay only needs to release escrow back into the liquidity pool
-     * on the send side. The PARTNER account is not used — it has no debit
-     * path and would accumulate indefinitely.
      */
     public function complete(Transaction $transaction, string $partnerReference): void
     {
         DB::transaction(function () use ($transaction, $partnerReference) {
 
-            // Re-fetch with lock to prevent concurrent completion
             $transaction = Transaction::where('id', $transaction->id)
                 ->whereIn('status', ['escrowed', 'processing', 'retrying'])
                 ->lockForUpdate()
@@ -569,7 +273,6 @@ class TransactionService
                 'completed_at'      => Carbon::now(),
             ]);
 
-            // Notify sender via outbox
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
                 'transaction_id' => $transaction->id,
@@ -583,127 +286,4 @@ class TransactionService
         });
     }
 
-    /**
-     * Reverse a transaction after all disbursement attempts fail.
-     * Called by the outbox worker when max_retries is exhausted.
-     *
-     * Posts Group 3: Debit escrow + guarantee → Credit sender
-     * Fee IS refunded — full amount returned to sender.
-     */
-    public function reverse(Transaction $transaction, string $reason): void
-    {
-        DB::transaction(function () use ($transaction, $reason) {
-
-            $transaction = Transaction::where('id', $transaction->id)
-                ->whereIn('status', ['escrowed', 'processing', 'retrying', 'refund_pending'])
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $sendCurrency    = $transaction->send_currency;
-            $receiveCurrency = $transaction->receive_currency;
-
-            $senderAccount    = Account::where('owner_id', $transaction->sender_id)
-                ->where('owner_type', User::class)
-                ->where('type', 'user_wallet')
-                ->where('currency_code', $sendCurrency)->firstOrFail();
-            $escrowAccount    = Account::where('type', 'escrow')
-                ->where('currency_code', $sendCurrency)->firstOrFail();
-            $guaranteeAccount = Account::where('type', 'guarantee')
-                ->where('corridor', "{$sendCurrency}-{$receiveCurrency}")
-                ->where('currency_code', $sendCurrency)->firstOrFail();
-
-            $feeAmount       = $transaction->fee_amount;
-            $guaranteeAmount = $transaction->guarantee_contribution;
-            $escrowAmount    = $transaction->send_amount - $feeAmount - $guaranteeAmount;
-            $refundAmount    = $transaction->send_amount; // full refund including fee
-
-            $this->ledger->post(
-                reference:   "TXN-{$transaction->reference_number}-REVERSAL",
-                type:        'transfer_reversal',
-                currency:    $sendCurrency,
-                entries: [
-                    [
-                        'account_id'  => $escrowAccount->id,
-                        'type'        => 'debit',
-                        'amount'      => $escrowAmount,
-                        'description' => "Reversal escrow release {$transaction->reference_number}",
-                    ],
-                    [
-                        'account_id'  => $guaranteeAccount->id,
-                        'type'        => 'debit',
-                        'amount'      => $guaranteeAmount,
-                        'description' => "Reversal guarantee return {$transaction->reference_number}",
-                    ],
-                    [
-                        'account_id'  => Account::where('type', 'fee')
-                            ->where('currency_code', $sendCurrency)->firstOrFail()->id,
-                        'type'        => 'debit',
-                        'amount'      => $feeAmount,
-                        'description' => "Reversal fee return {$transaction->reference_number}",
-                    ],
-                    [
-                        'account_id'  => $senderAccount->id,
-                        'type'        => 'credit',
-                        'amount'      => $refundAmount,
-                        'description' => "Full refund for failed transfer {$transaction->reference_number}",
-                    ],
-                ],
-                description: "Reversal: {$reason}"
-            );
-
-            $transaction->update([
-                'status'         => 'refunded',
-                'failure_reason' => $reason,
-                'refunded_at'    => Carbon::now(),
-            ]);
-
-            OutboxEvent::create([
-                'event_type'     => 'sms_notification',
-                'transaction_id' => $transaction->id,
-                'payload'        => [
-                    'type'           => 'transfer_refunded',
-                    'transaction_id' => $transaction->id,
-                    'reference'      => $transaction->reference_number,
-                    'refund_amount'   => $refundAmount,
-                    'currency'       => $sendCurrency,
-                ],
-                'status'          => 'pending',
-                'next_attempt_at' => Carbon::now(),
-            ]);
-        });
-    }
-
-    // ── Private helpers ──────────────────────────────────────────────────
-
-    private function calculateFee(float $amount, RateLock $rateLock): float
-    {
-        $percentFee = round($amount * ($rateLock->fee_percent / 100), 6);
-        return round($percentFee + $rateLock->fee_flat, 6);
-    }
-
-    private function calculateGuarantee(
-        float   $amount,
-        string  $fromCurrency,
-        string  $toCurrency,
-        ?float  $guaranteePercent = null
-    ): float {
-        if ($guaranteePercent !== null) {
-            return round($amount * $guaranteePercent, 6);
-        }
-
-        // Fallback: read from active corridor configuration
-        $corridor = \App\Models\PartnerCorridor::whereHas('partner', fn($q) => $q->where('is_active', true))
-            ->where('from_currency', $fromCurrency)
-            ->where('to_currency', $toCurrency)
-            ->where('is_active', true)
-            ->first();
-
-        return round($amount * ($corridor?->guarantee_percent ?? 0.005), 6);
-    }
-
-    private function generateReference(): string
-    {
-        // Format: ULP-20260408-A3F9K2
-        return 'ULP-' . Carbon::now()->format('Ymd') . '-' . strtoupper(Str::random(6));
-    }
 }
