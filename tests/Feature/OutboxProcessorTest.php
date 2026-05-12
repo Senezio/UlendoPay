@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Services\Outbox\OutboxProcessor;
 use App\Services\TransactionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -51,7 +52,7 @@ class OutboxProcessorTest extends TestCase
         $this->sender = User::create([
             'name'         => 'Outbox Sender',
             'email'        => 'outbox-sender@test.com',
-            'password'     => bcrypt('password'),
+            'password'     => Hash::make('password', ['rounds' => 4]),
             'country_code' => 'MWI',
             'kyc_status'   => 'verified',
             'status'       => 'active',

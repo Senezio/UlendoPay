@@ -2,6 +2,9 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AuthTwoFactorController;
+use App\Http\Controllers\Api\AuthSessionController;
+use App\Http\Controllers\Api\AuthLookupController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\RecipientController;
 use App\Http\Controllers\Api\RateLockController;
@@ -9,7 +12,18 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\KycController;
 use App\Http\Controllers\Api\TopUpController;
 use App\Http\Controllers\Api\WithdrawalController;
-use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\Admin\DashboardController;
+use App\Http\Controllers\Api\Admin\KycAdminController;
+use App\Http\Controllers\Api\Admin\UserAdminController;
+use App\Http\Controllers\Api\Admin\TransactionAdminController;
+use App\Http\Controllers\Api\Admin\RateAdminController;
+use App\Http\Controllers\Api\Admin\AccountAdminController;
+use App\Http\Controllers\Api\Admin\PartnerAdminController;
+use App\Http\Controllers\Api\Admin\FraudAdminController;
+use App\Http\Controllers\Api\Admin\ComplianceAdminController;
+use App\Http\Controllers\Api\Admin\TierAdminController;
+use App\Http\Controllers\Api\Admin\StaffAdminController;
+use App\Http\Controllers\Api\Admin\WebhookAdminController;
 use App\Http\Controllers\Api\ReportingController;
 use App\Http\Controllers\Api\PeriodController;
 
@@ -19,18 +33,17 @@ Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::post('/register',        [AuthController::class, 'register'])->middleware('throttle:otp');
         Route::post('/verify-phone',    [AuthController::class, 'verifyPhone']);
-        Route::post('/login', [AuthController::class, 'login']);
-        Route::post('/verify-login', [AuthController::class, 'verifyLogin']);
+        Route::post('/login',           [AuthController::class, 'login']);
+        Route::post('/verify-login',    [AuthController::class, 'verifyLogin']);
         Route::post('/verify-totp',     [AuthController::class, 'verifyTotp']);
-        Route::post('/forgot-pin', [AuthController::class, 'forgotPin'])->middleware('throttle:otp');
+        Route::post('/forgot-pin',      [AuthController::class, 'forgotPin'])->middleware('throttle:otp');
         Route::post('/reset-pin',       [AuthController::class, 'resetPin']);
         Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:otp');
         Route::post('/reset-password',  [AuthController::class, 'resetPassword']);
-        Route::post('/resend-otp',       [AuthController::class, 'resendOtp']);
+        Route::post('/resend-otp',      [AuthController::class, 'resendOtp']);
     });
 
-    Route::post('/contact', [AppHttpControllersApiPublicController::class, 'contact'])->middleware('throttle:6,1');
-    Route::post("/contact", [\App\Http\Controllers\Api\PublicController::class, "contact"])->middleware("throttle:6,1");
+    Route::post('/contact', [\App\Http\Controllers\Api\PublicController::class, 'contact'])->middleware('throttle:6,1');
 
     // ── Webhooks — public, secured via per-provider verification ────────────
     //
@@ -43,10 +56,10 @@ Route::prefix('v1')->group(function () {
     //   MTN collections   → /api/v1/topup/webhook/mtn
     //   MTN disbursements → /api/v1/withdraw/webhook/mtn
     //
-    Route::post('/topup/webhook/pawapay',   [TopUpController::class, 'pawapayWebhook']);
-    Route::post('/topup/webhook/mtn',       [TopUpController::class, 'mtnWebhook']);
-    Route::post('/withdraw/webhook/pawapay',[WithdrawalController::class, 'pawapayWebhook']);
-    Route::post('/withdraw/webhook/mtn',    [WithdrawalController::class, 'mtnWebhook']);
+    Route::post('/topup/webhook/pawapay',    [TopUpController::class, 'pawapayWebhook']);
+    Route::post('/topup/webhook/mtn',        [TopUpController::class, 'mtnWebhook']);
+    Route::post('/withdraw/webhook/pawapay', [WithdrawalController::class, 'pawapayWebhook']);
+    Route::post('/withdraw/webhook/mtn',     [WithdrawalController::class, 'mtnWebhook']);
 
     // Legacy webhook routes — kept for backward compatibility with older integrations
     Route::post('/topup/webhook',    [TopUpController::class, 'webhook']);
@@ -61,38 +74,40 @@ Route::prefix('v1')->group(function () {
     // ── Authenticated routes ─────────────────────────────────────────────────
     Route::middleware('auth:sanctum')->group(function () {
 
-        // Auth
-        Route::post('/auth/logout', [AuthController::class, 'logout']);
-        Route::get('/auth/me',      [AuthController::class, 'me']);
-        Route::get('/users/lookup',  [AuthController::class, 'lookup'])->middleware('throttle:lookup');
-
-        // Transfer tiers
-        Route::get('/tier', [\App\Http\Controllers\Api\TierController::class, 'show']);
-        Route::get('/tier/available', [\App\Http\Controllers\Api\TierController::class, 'availableTiers']);
-        Route::get('/referral', [\App\Http\Controllers\Api\TierController::class, 'referral']);
+        // Session
+        Route::post('/auth/logout',          [AuthSessionController::class, 'logout']);
+        Route::get('/auth/me',               [AuthSessionController::class, 'me']);
+        Route::post('/auth/verify-pin',      [AuthSessionController::class, 'verifyPin']);
+        Route::post('/auth/verify-email',    [AuthSessionController::class, 'verifyEmail']);
+        Route::get('/auth/sessions',         [AuthSessionController::class, 'sessions']);
+        Route::delete('/auth/sessions/{id}', [AuthSessionController::class, 'revokeSession']);
+        Route::delete('/auth/sessions',      [AuthSessionController::class, 'revokeAllSessions']);
+        Route::delete('/auth/account',       [AuthSessionController::class, 'closeAccount']);
+        Route::get('/auth/audit-log',        [AuthSessionController::class, 'auditLog']);
 
         // Two-Factor Authentication
-        Route::get('/auth/account-numbers', [AuthController::class, 'accountNumbers']);
-        Route::get('/wallets/lookup', [AuthController::class, 'walletLookup']);
-        Route::get('/auth/2fa/setup',    [AuthController::class, 'twoFactorSetup']);
-        Route::post('/auth/2fa/enable',  [AuthController::class, 'twoFactorEnable']);
-        Route::post('/auth/2fa/disable', [AuthController::class, 'twoFactorDisable']);
-        Route::get('/auth/2fa/status',   [AuthController::class, 'twoFactorStatus']);
-        Route::post('/auth/verify-pin',      [AuthController::class, 'verifyPin']);
-        Route::post('/auth/verify-email',    [AuthController::class, 'verifyEmail']);
-        Route::get('/auth/sessions',         [AuthController::class, 'sessions']);
-        Route::delete('/auth/sessions/{id}', [AuthController::class, 'revokeSession']);
-    Route::delete('/auth/account', [AuthController::class, 'closeAccount']);
-        Route::delete('/auth/sessions',      [AuthController::class, 'revokeAllSessions']);
-        Route::get('/auth/audit-log',        [AuthController::class, 'auditLog']);
+        Route::get('/auth/2fa/setup',    [AuthTwoFactorController::class, 'setup']);
+        Route::post('/auth/2fa/enable',  [AuthTwoFactorController::class, 'enable']);
+        Route::post('/auth/2fa/disable', [AuthTwoFactorController::class, 'disable']);
+        Route::get('/auth/2fa/status',   [AuthTwoFactorController::class, 'status']);
+
+        // Lookup
+        Route::get('/users/lookup',          [AuthLookupController::class, 'lookup'])->middleware('throttle:lookup');
+        Route::get('/wallets/lookup',        [AuthLookupController::class, 'walletLookup']);
+        Route::get('/auth/account-numbers',  [AuthLookupController::class, 'accountNumbers']);
+
+        // Transfer tiers
+        Route::get('/tier',           [\App\Http\Controllers\Api\TierController::class, 'show']);
+        Route::get('/tier/available', [\App\Http\Controllers\Api\TierController::class, 'availableTiers']);
+        Route::get('/referral',       [\App\Http\Controllers\Api\TierController::class, 'referral']);
 
         // KYC
-        Route::get('/kyc/status',        [KycController::class, 'status']);
-        Route::post('/kyc/submit',       [KycController::class, 'submit'])->middleware('throttle:kyc');
+        Route::get('/kyc/status',  [KycController::class, 'status']);
+        Route::post('/kyc/submit', [KycController::class, 'submit'])->middleware('throttle:kyc');
 
         // Wallets
         Route::get('/wallets',            [WalletController::class, 'index']);
-        Route::get('/statement',           [\App\Http\Controllers\Api\StatementController::class, 'download']);
+        Route::get('/statement',          [\App\Http\Controllers\Api\StatementController::class, 'download']);
         Route::get('/wallets/{currency}', [WalletController::class, 'show']);
 
         // Top-up
@@ -113,11 +128,11 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('/recipients', RecipientController::class);
 
         // Bank accounts
-        Route::get('/bank-accounts',                [\App\Http\Controllers\Api\UserBankAccountController::class, 'index']);
-        Route::post('/bank-accounts',               [\App\Http\Controllers\Api\UserBankAccountController::class, 'store']);
-        Route::put('/bank-accounts/{id}',           [\App\Http\Controllers\Api\UserBankAccountController::class, 'update']);
-        Route::delete('/bank-accounts/{id}',        [\App\Http\Controllers\Api\UserBankAccountController::class, 'destroy']);
-        Route::post('/bank-accounts/{id}/default',  [\App\Http\Controllers\Api\UserBankAccountController::class, 'setDefault']);
+        Route::get('/bank-accounts',               [\App\Http\Controllers\Api\UserBankAccountController::class, 'index']);
+        Route::post('/bank-accounts',              [\App\Http\Controllers\Api\UserBankAccountController::class, 'store']);
+        Route::put('/bank-accounts/{id}',          [\App\Http\Controllers\Api\UserBankAccountController::class, 'update']);
+        Route::delete('/bank-accounts/{id}',       [\App\Http\Controllers\Api\UserBankAccountController::class, 'destroy']);
+        Route::post('/bank-accounts/{id}/default', [\App\Http\Controllers\Api\UserBankAccountController::class, 'setDefault']);
 
         // Rate locks
         Route::post('/rate-locks',     [RateLockController::class, 'store']);
@@ -131,120 +146,107 @@ Route::prefix('v1')->group(function () {
         // ── Admin routes ─────────────────────────────────────────────────────
         Route::prefix('admin')->middleware('admin')->group(function () {
 
-            // Webhook logs (admin)
-            Route::get('/webhooks/logs', [AdminController::class, 'webhookLogs']);
-            Route::get('/webhooks/logs/{id}', [AdminController::class, 'webhookLogShow']);
+            Route::get('/stats',     [DashboardController::class, 'stats']);
+            Route::get('/analytics', [DashboardController::class, 'analytics']);
+            Route::get('/audit-log', [DashboardController::class, 'adminAuditLog']);
+            Route::get('/settings',  [DashboardController::class, 'settings']);
 
+            Route::get('/webhooks/logs',      [WebhookAdminController::class, 'webhookLogs']);
+            Route::get('/webhooks/logs/{id}', [WebhookAdminController::class, 'webhookLogShow']);
 
-            Route::get('/stats',     [AdminController::class, 'stats']);
-            Route::get('/audit-log',  [AdminController::class, 'adminAuditLog']);
-            Route::get('/analytics', [AdminController::class, 'analytics']);
-            Route::get('/accounts',  [AdminController::class, 'accounts']);
-
-            // KYC
-            Route::get('/settings',          [AdminController::class, 'settings']);
-            Route::get('/kyc/queue',         [AdminController::class, 'kycQueue']);
-            Route::get('/kyc/verified',      [AdminController::class, 'kycVerified']);
-            Route::get('/kyc/{id}',          [AdminController::class, 'kycShow']);
-            Route::post('/kyc/{id}/approve', [AdminController::class, 'kycApprove'])
+            Route::get('/kyc/queue',         [KycAdminController::class, 'kycQueue']);
+            Route::get('/kyc/verified',      [KycAdminController::class, 'kycVerified']);
+            Route::get('/kyc/{id}',          [KycAdminController::class, 'kycShow']);
+            Route::post('/kyc/{id}/approve', [KycAdminController::class, 'kycApprove'])
                 ->middleware('admin:super_admin,kyc_reviewer');
-            Route::post('/kyc/{id}/reject',  [AdminController::class, 'kycReject'])
+            Route::post('/kyc/{id}/reject',  [KycAdminController::class, 'kycReject'])
                 ->middleware('admin:super_admin,kyc_reviewer');
 
-            // Users
-            Route::get('/users',               [AdminController::class, 'users']);
-            Route::get('/users/{id}',          [AdminController::class, 'userShow']);
-            Route::post('/users/{id}/suspend', [AdminController::class, 'userSuspend'])
+            Route::get('/users',               [UserAdminController::class, 'users']);
+            Route::get('/users/{id}',          [UserAdminController::class, 'userShow']);
+            Route::post('/users/{id}/suspend', [UserAdminController::class, 'userSuspend'])
                 ->middleware('admin:super_admin,finance_officer');
-            Route::post('/users/{id}/restore', [AdminController::class, 'userRestore'])
+            Route::post('/users/{id}/restore', [UserAdminController::class, 'userRestore'])
+                ->middleware('admin:super_admin');
+            Route::post('/users/{id}/upgrade-tier', [UserAdminController::class, 'userUpgradeTier'])
+                ->middleware('admin:super_admin,kyc_reviewer');
+
+            Route::get('/transactions',                    [TransactionAdminController::class, 'transactions']);
+            Route::get('/transactions/export',             [TransactionAdminController::class, 'exportTransactions']);
+            Route::get('/transactions/{reference}',        [TransactionAdminController::class, 'transactionShow']);
+            Route::post('/transactions/{reference}/retry', [TransactionAdminController::class, 'retryTransaction']);
+
+            Route::get('/rates',        [RateAdminController::class, 'rates']);
+            Route::post('/rates/fetch', [RateAdminController::class, 'fetchRates'])
                 ->middleware('admin:super_admin');
 
-            // Transactions
-            Route::get('/transactions',                    [AdminController::class, 'transactions']);
-            Route::get('/transactions/export',             [AdminController::class, 'exportTransactions']);
-            Route::get('/transactions/{reference}',        [AdminController::class, 'transactionShow']);
-            Route::post('/transactions/{reference}/retry', [AdminController::class, 'retryTransaction']);
-            Route::get('/partners/health',                 [AdminController::class, 'partnerHealth']);
-
-            // Exchange rates
-            Route::get('/rates',        [AdminController::class, 'rates']);
-            Route::post('/rates/fetch', [AdminController::class, 'fetchRates'])
+            Route::get('/accounts',              [AccountAdminController::class, 'accounts']);
+            Route::post('/accounts',             [AccountAdminController::class, 'accountCreate'])
+                ->middleware('admin:super_admin');
+            Route::post('/accounts/{id}/toggle', [AccountAdminController::class, 'accountToggle'])
+                ->middleware('admin:super_admin');
+            Route::get('/accounts/{id}/ledger',  [AccountAdminController::class, 'accountLedger']);
+            Route::post('/accounts/{id}/adjust', [AccountAdminController::class, 'accountAdjust'])
                 ->middleware('admin:super_admin');
 
-            // Account management
-            Route::get('/accounts',              [AdminController::class, 'accounts']);
-            Route::post('/accounts',             [AdminController::class, 'accountCreate'])
+            Route::get('/partners',               [PartnerAdminController::class, 'partners']);
+            Route::get('/partners/health',        [PartnerAdminController::class, 'partnerHealth']);
+            Route::post('/partners/{id}/toggle',  [PartnerAdminController::class, 'partnerToggle'])
                 ->middleware('admin:super_admin');
-            Route::post('/accounts/{id}/toggle', [AdminController::class, 'accountToggle'])
+            Route::put('/corridors/{id}',         [PartnerAdminController::class, 'corridorUpdate'])
                 ->middleware('admin:super_admin');
-            Route::get('/accounts/{id}/ledger',  [AdminController::class, 'accountLedger']);
-            Route::post('/accounts/{id}/adjust', [AdminController::class, 'accountAdjust'])
-                ->middleware('admin:super_admin');
-
-            // Partner management
-            Route::get('/partners',                [AdminController::class, 'partners']);
-            Route::post('/partners/{id}/toggle',   [AdminController::class, 'partnerToggle'])
-                ->middleware('admin:super_admin');
-            Route::put('/corridors/{id}',          [AdminController::class, 'corridorUpdate'])
-                ->middleware('admin:super_admin');
-            Route::post('/corridors/{id}/toggle',  [AdminController::class, 'corridorToggle'])
+            Route::post('/corridors/{id}/toggle', [PartnerAdminController::class, 'corridorToggle'])
                 ->middleware('admin:super_admin');
 
-            // Fraud alerts
-            Route::get('/fraud-alerts',               [AdminController::class, 'fraudAlerts']);
-            Route::post('/fraud-alerts/{id}/clear',   [AdminController::class, 'fraudAlertClear'])
+            Route::get('/fraud-alerts',               [FraudAdminController::class, 'fraudAlerts']);
+            Route::post('/fraud-alerts/{id}/clear',   [FraudAdminController::class, 'fraudAlertClear'])
                 ->middleware('admin:super_admin,finance_officer');
-            Route::post('/fraud-alerts/{id}/confirm', [AdminController::class, 'fraudAlertConfirm'])
+            Route::post('/fraud-alerts/{id}/confirm', [FraudAdminController::class, 'fraudAlertConfirm'])
                 ->middleware('admin:super_admin,finance_officer');
 
-            // Compliance alerts
-            Route::get('/compliance/stats',                    [AdminController::class, 'complianceStats']);
-            Route::get('/compliance/alerts',                   [AdminController::class, 'complianceAlerts']);
-            Route::get('/compliance/alerts/{id}',              [AdminController::class, 'complianceAlertShow']);
-            Route::post('/compliance/alerts/{id}/review',      [AdminController::class, 'complianceAlertReview'])
+            Route::get('/compliance/stats',                [ComplianceAdminController::class, 'complianceStats']);
+            Route::get('/compliance/alerts',               [ComplianceAdminController::class, 'complianceAlerts']);
+            Route::get('/compliance/alerts/{id}',          [ComplianceAdminController::class, 'complianceAlertShow']);
+            Route::post('/compliance/alerts/{id}/review',  [ComplianceAdminController::class, 'complianceAlertReview'])
                 ->middleware('admin:super_admin,kyc_reviewer');
-            Route::post('/compliance/alerts/{id}/clear',       [AdminController::class, 'complianceAlertClear'])
+            Route::post('/compliance/alerts/{id}/clear',   [ComplianceAdminController::class, 'complianceAlertClear'])
                 ->middleware('admin:super_admin,kyc_reviewer');
-            Route::post('/compliance/alerts/{id}/confirm',     [AdminController::class, 'complianceAlertConfirm'])
+            Route::post('/compliance/alerts/{id}/confirm', [ComplianceAdminController::class, 'complianceAlertConfirm'])
                 ->middleware('admin:super_admin');
 
-            // Tier management
-            Route::get('/tiers',                        [AdminController::class, 'tierList']);
-            Route::post('/tiers',                       [AdminController::class, 'tierCreate'])
+            Route::get('/tiers',      [TierAdminController::class, 'tierList']);
+            Route::post('/tiers',     [TierAdminController::class, 'tierCreate'])
                 ->middleware('admin:super_admin');
-            Route::put('/tiers/{id}',                   [AdminController::class, 'tierUpdate'])
+            Route::put('/tiers/{id}', [TierAdminController::class, 'tierUpdate'])
                 ->middleware('admin:super_admin');
-            Route::post('/users/{id}/upgrade-tier',     [AdminController::class, 'userUpgradeTier'])
-                ->middleware('admin:super_admin,kyc_reviewer');
 
-            // Staff management
-            Route::get('/staff',  [AdminController::class, 'staffList'])
+            Route::get('/staff',  [StaffAdminController::class, 'staffList'])
                 ->middleware('admin:super_admin');
-            Route::post('/staff', [AdminController::class, 'staffCreate'])
+            Route::post('/staff', [StaffAdminController::class, 'staffCreate'])
                 ->middleware('admin:super_admin');
         });
     });
 
-        // ── Financial Reporting ──────────────────────────────────────────────
-        Route::prefix('reports')
-            ->middleware(['auth:sanctum', 'admin:super_admin,finance_officer'])
-            ->group(function () {
-                Route::get('trial-balance', [ReportingController::class, 'trialBalance']);
-                Route::get('balance-sheet',  [ReportingController::class, 'balanceSheet']);
-                Route::get('profit-loss',    [ReportingController::class, 'profitLoss']);
-                Route::get('cash-flow',      [ReportingController::class, 'cashFlow']);
-            });
+    // ── Financial Reporting ──────────────────────────────────────────────────
+    Route::prefix('reports')
+        ->middleware(['auth:sanctum', 'admin:super_admin,finance_officer'])
+        ->group(function () {
+            Route::get('trial-balance', [ReportingController::class, 'trialBalance']);
+            Route::get('balance-sheet', [ReportingController::class, 'balanceSheet']);
+            Route::get('profit-loss',   [ReportingController::class, 'profitLoss']);
+            Route::get('cash-flow',     [ReportingController::class, 'cashFlow']);
+        });
 
-        // ── Accounting Periods ───────────────────────────────────────────────
-        Route::prefix('periods')
-            ->middleware(['auth:sanctum', 'admin:super_admin,finance_officer'])
-            ->group(function () {
-                Route::get('/',             [PeriodController::class, 'index']);
-                Route::get('/{id}',         [PeriodController::class, 'show']);
-                Route::post('/',            [PeriodController::class, 'open']);
-                Route::post('/{id}/close',  [PeriodController::class, 'close']);
-                Route::post('/{id}/reopen', [PeriodController::class, 'reopen']);
-                Route::post('/{id}/lock',   [PeriodController::class, 'lock']);
-                Route::get('/{id}/snapshots', [PeriodController::class, 'snapshots']);
-            });
+    // ── Accounting Periods ───────────────────────────────────────────────────
+    Route::prefix('periods')
+        ->middleware(['auth:sanctum', 'admin:super_admin,finance_officer'])
+        ->group(function () {
+            Route::get('/',               [PeriodController::class, 'index']);
+            Route::get('/{id}',           [PeriodController::class, 'show']);
+            Route::post('/',              [PeriodController::class, 'open']);
+            Route::post('/{id}/close',    [PeriodController::class, 'close']);
+            Route::post('/{id}/reopen',   [PeriodController::class, 'reopen']);
+            Route::post('/{id}/lock',     [PeriodController::class, 'lock']);
+            Route::get('/{id}/snapshots', [PeriodController::class, 'snapshots']);
+        });
 });

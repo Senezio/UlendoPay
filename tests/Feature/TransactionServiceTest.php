@@ -16,6 +16,7 @@ use App\Models\Wallet;
 use App\Models\ExchangeRate;
 use App\Services\TransactionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -51,7 +52,7 @@ class TransactionServiceTest extends TestCase
         $this->sender = User::create([
             'name'         => 'Test Sender',
             'email'        => 'sender@test.com',
-            'password'     => bcrypt('password'),
+            'password'     => Hash::make('password', ['rounds' => 4]),
             'country_code' => 'MWI',
             'kyc_status'   => 'verified',
             'status'       => 'active',
@@ -170,7 +171,7 @@ class TransactionServiceTest extends TestCase
         // Create recipient user with MWK wallet
         $recipientUser = User::create([
             'name' => 'Recipient', 'email' => 'recipient@test.com',
-            'password' => bcrypt('pass'), 'country_code' => 'MWI',
+            'password' => Hash::make('pass', ['rounds' => 4]), 'country_code' => 'MWI',
             'kyc_status' => 'verified', 'status' => 'active', 'tier' => 'basic',
         ]);
         $recipientUser->phone = '+265991000002';
@@ -320,7 +321,7 @@ class TransactionServiceTest extends TestCase
     {
         $recipientUser = User::create([
             'name' => 'Recipient2', 'email' => 'r2@test.com',
-            'password' => bcrypt('pass'), 'country_code' => 'MWI',
+            'password' => Hash::make('pass', ['rounds' => 4]), 'country_code' => 'MWI',
             'kyc_status' => 'verified', 'status' => 'active', 'tier' => 'basic',
         ]);
         $recipientUser->phone = '+265991000004';
