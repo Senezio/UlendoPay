@@ -385,7 +385,7 @@ class TransactionServiceTest extends TestCase
     }
 
     #[Test]
-    public function reverse_refunds_full_amount_to_sender(): void
+    public function refund_returns_full_amount_to_sender(): void
     {
         $recipient = Recipient::create([
             'user_id'        => $this->sender->id,
@@ -401,14 +401,14 @@ class TransactionServiceTest extends TestCase
         $transaction = $this->service->initiate('test-key-006', $this->sender, $recipient, $rateLock, 100000);
         $this->assertEquals('escrowed', $transaction->status);
 
-        $balanceBefore = AccountBalance::where('account_id', $this->senderAccount->id)->value('balance');
+        $transaction->update(['status' => 'failed']);
 
-        $this->service->reverse($transaction, 'Disbursement failed after max retries');
+        $refundService = app(\App\Services\RefundService::class);
+        $refundService->refund($transaction);
 
         $transaction->refresh();
         $this->assertEquals('refunded', $transaction->status);
 
-        // Full amount returned to sender
         $balanceAfter = AccountBalance::where('account_id', $this->senderAccount->id)->value('balance');
         $this->assertEquals(500000, $balanceAfter);
     }

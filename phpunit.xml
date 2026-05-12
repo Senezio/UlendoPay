@@ -34,6 +34,10 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <env name="FOREXRATEAPI_BASE_URL" value="https://api.forexrateapi.com/v1"/>
+        <env name="FOREXRATEAPI_API_KEY" value="3f8270157b055b0a2c622a5c17919cf0"/>
+        <env name="FOREXRATEAPI_BASE_CURRENCY" value="USD"/>
+        <env name="FOREXRATEAPI_EXPIRY_HOURS" value="14"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
