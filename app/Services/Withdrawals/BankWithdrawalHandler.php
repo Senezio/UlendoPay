@@ -16,172 +16,172 @@ use Illuminate\Support\Facades\Log;
 class BankWithdrawalHandler implements WithdrawalHandlerInterface
 {
     public function __construct(
-        private LedgerService  ,
-        private TerraPayPartner ,
+        private LedgerService   $ledger,
+        private TerraPayPartner $terraPay,
     ) {}
 
-    public function supports(WithdrawalContext ): bool
+    public function supports(WithdrawalContext $ctx): bool
     {
-        return ->isBankTransfer();
+        return $ctx->isBankTransfer();
     }
 
-    public function handle(WithdrawalContext ): Withdrawal
+    public function handle(WithdrawalContext $ctx): Withdrawal
     {
-         = ->user->wallets()->where(status, active)->firstOrFail();
+        $wallet = $ctx->user->wallets()->where('status', 'active')->firstOrFail();
 
-        return DB::transaction(function () use (, ) {
-             = Account::where(owner_id, ->user->id)
-                ->where(owner_type, User::class)
-                ->where(type, user_wallet)
-                ->where(currency_code, ->currency)
+        return DB::transaction(function () use ($ctx, $wallet) {
+            $walletAccount = Account::where('owner_id', $ctx->user->id)
+                ->where('owner_type', User::class)
+                ->where('type', 'user_wallet')
+                ->where('currency_code', $ctx->currency)
                 ->lockForUpdate()
                 ->firstOrFail();
 
-             = Account::where(code, "{->currency}-POOL")
+            $poolAccount = Account::where('code', "{$ctx->currency}-POOL")
                 ->lockForUpdate()
                 ->firstOrFail();
 
-             = Withdrawal::create([
-                reference           => Withdrawal::generateReference(),
-                user_id             => ->user->id,
-                wallet_id           => ->id,
-                amount              => ->amount,
-                currency_code       => ->currency,
-                withdrawal_method   => bank_transfer,
-                provider            => terrapay,
-                bank_account_number => ->bankAccountNumber,
-                bank_branch_code    => ->bankBranchCode,
-                bank_name           => ->bankName,
-                country_code        => ->countryCode,
-                status              => initiated,
-                initiated_at        => now(),
+            $withdrawal = Withdrawal::create([
+                'reference'           => Withdrawal::generateReference(),
+                'user_id'             => $ctx->user->id,
+                'wallet_id'           => $wallet->id,
+                'amount'              => $ctx->amount,
+                'currency_code'       => $ctx->currency,
+                'withdrawal_method'   => 'bank_transfer',
+                'provider'            => 'terrapay',
+                'bank_account_number' => $ctx->accountNumber,
+                'bank_branch_code'    => $ctx->bankCode,
+                'bank_name'           => $ctx->accountName,
+                'country_code'        => $ctx->countryCode,
+                'status'              => 'initiated',
+                'initiated_at'        => now(),
             ]);
 
-            ->ledger->post(
-                reference:   "WDR-{->reference}",
-                type:        adjustment,
-                currency:    ->currency,
+            $this->ledger->post(
+                reference:   "WDR-{$withdrawal->reference}",
+                type:        'adjustment',
+                currency:    $ctx->currency,
                 entries: [
                     [
-                        account_id  => ->id,
-                        type        => debit,
-                        amount      => ->amount,
-                        description => "Bank withdrawal: {->reference}",
+                        'account_id'  => $walletAccount->id,
+                        'type'        => 'debit',
+                        'amount'      => $ctx->amount,
+                        'description' => "Bank withdrawal: {$withdrawal->reference}",
                     ],
                     [
-                        account_id  => ->id,
-                        type        => credit,
-                        amount      => ->amount,
-                        description => "Bank withdrawal held: {->reference}",
+                        'account_id'  => $poolAccount->id,
+                        'type'        => 'credit',
+                        'amount'      => $ctx->amount,
+                        'description' => "Bank withdrawal held: {$withdrawal->reference}",
                     ],
                 ],
-                description: "Bank withdrawal initiated: {->reference}"
+                description: "Bank withdrawal initiated: {$withdrawal->reference}"
             );
 
             OutboxEvent::create([
-                event_type     => disbursement_requested,
-                transaction_id => null,
-                payload        => [
-                    type          => bank_withdrawal,
-                    withdrawal_id => ->id,
-                    reference     => ->reference,
+                'event_type'     => 'disbursement_requested',
+                'transaction_id' => null,
+                'payload'        => [
+                    'type'          => 'bank_withdrawal',
+                    'withdrawal_id' => $withdrawal->id,
+                    'reference'     => $withdrawal->reference,
                 ],
-                status          => pending,
-                next_attempt_at => now(),
-                max_attempts    => 3,
+                'status'          => 'pending',
+                'next_attempt_at' => now(),
+                'max_attempts'    => 3,
             ]);
 
             AuditLog::create([
-                user_id     => ->user->id,
-                action      => withdrawal.bank.initiated,
-                entity_type => Withdrawal,
-                entity_id   => ->id,
-                new_values  => [
-                    reference    => ->reference,
-                    amount       => ->amount,
-                    currency     => ->currency,
-                    bank_account => ->bankAccountNumber,
-                    provider     => terrapay,
+                'user_id'     => $ctx->user->id,
+                'action'      => 'withdrawal.bank.initiated',
+                'entity_type' => 'Withdrawal',
+                'entity_id'   => $withdrawal->id,
+                'new_values'  => [
+                    'reference'    => $withdrawal->reference,
+                    'amount'       => $ctx->amount,
+                    'currency'     => $ctx->currency,
+                    'bank_account' => $ctx->accountNumber,
+                    'provider'     => 'terrapay',
                 ],
             ]);
 
-            ->update([status => pending]);
+            $withdrawal->update(['status' => 'pending']);
 
-            return ->fresh();
+            return $withdrawal->fresh();
         });
     }
 
-    public function pollStatus(Withdrawal ): void
+    public function pollStatus(Withdrawal $withdrawal): void
     {
-        if (->status !== pending) {
+        if ($withdrawal->status !== 'pending') {
             return;
         }
 
-        if (empty(->provider_reference)) {
+        if (empty($withdrawal->provider_reference)) {
             throw new \RuntimeException(
-                "Withdrawal {->reference} has no provider reference to poll."
+                "Withdrawal {$withdrawal->reference} has no provider reference to poll."
             );
         }
 
-         = ->terraPay->checkStatus(->provider_reference);
+        $result = $this->terraPay->checkStatus($withdrawal->provider_reference);
 
-        if (->success) {
-            DB::transaction(function () use () {
-                 = Account::where(code, "{->currency_code}-POOL")
+        if ($result->success) {
+            DB::transaction(function () use ($withdrawal, $result) {
+                $poolAccount = Account::where('code', "{$withdrawal->currency_code}-POOL")
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                 = Account::where(code, "{->currency_code}-EQUITY")
+                $equityAccount = Account::where('code', "{$withdrawal->currency_code}-EQUITY")
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                ->ledger->post(
-                    reference:   "WDR-COMPLETE-{->reference}",
-                    type:        adjustment,
-                    currency:    ->currency_code,
+                $this->ledger->post(
+                    reference:   "WDR-COMPLETE-{$withdrawal->reference}",
+                    type:        'adjustment',
+                    currency:    $withdrawal->currency_code,
                     entries: [
                         [
-                            account_id  => ->id,
-                            type        => debit,
-                            amount      => ->amount,
-                            description => "Bank withdrawal disbursed: {->reference}",
+                            'account_id'  => $poolAccount->id,
+                            'type'        => 'debit',
+                            'amount'      => $withdrawal->amount,
+                            'description' => "Bank withdrawal disbursed: {$withdrawal->reference}",
                         ],
                         [
-                            account_id  => ->id,
-                            type        => credit,
-                            amount      => ->amount,
-                            description => "Bank withdrawal exited system: {->reference}",
+                            'account_id'  => $equityAccount->id,
+                            'type'        => 'credit',
+                            'amount'      => $withdrawal->amount,
+                            'description' => "Bank withdrawal exited system: {$withdrawal->reference}",
                         ],
                     ],
-                    description: "Bank withdrawal completion: {->reference}"
+                    description: "Bank withdrawal completion: {$withdrawal->reference}"
                 );
 
-                ->update([
-                    status       => completed,
-                    completed_at => now(),
+                $withdrawal->update([
+                    'status'       => 'completed',
+                    'completed_at' => now(),
                 ]);
             });
 
             OutboxEvent::create([
-                event_type     => sms_notification,
-                transaction_id => null,
-                payload        => [
-                    type         => withdrawal_completed,
-                    phone        => ->user->phone,
-                    amount       => ->amount,
-                    currency     => ->currency_code,
-                    reference    => ->reference,
-                    country_code => ->country_code,
+                'event_type'     => 'sms_notification',
+                'transaction_id' => null,
+                'payload'        => [
+                    'type'         => 'withdrawal_completed',
+                    'phone'        => $withdrawal->user->phone,
+                    'amount'       => $withdrawal->amount,
+                    'currency'     => $withdrawal->currency_code,
+                    'reference'    => $withdrawal->reference,
+                    'country_code' => $withdrawal->country_code,
                 ],
-                status => pending,
+                'status' => 'pending',
             ]);
 
-        } elseif (str_contains(->failureReason ?? , pending)) {
-            throw new \RuntimeException("Bank withdrawal still pending: {->reference}");
+        } elseif (str_contains($result->failureReason ?? '', 'pending')) {
+            throw new \RuntimeException("Bank withdrawal still pending: {$withdrawal->reference}");
         } else {
             app(WithdrawalRefundHandler::class)->refundWallet(
-                ,
-                ->failureReason ?? TerraPay disbursement failed
+                $withdrawal,
+                $result->failureReason ?? 'TerraPay disbursement failed'
             );
         }
     }
