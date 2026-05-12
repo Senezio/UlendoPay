@@ -11,12 +11,13 @@ class OutboxProcessor
     private array $handlers;
 
     public function __construct(
-        DisbursementHandler       $disbursement,
-        InternalSettlementHandler $settlement,
-        RefundHandler             $refund,
-        SmsHandler                $sms,
+        DisbursementHandler        $disbursement,
+        InternalSettlementHandler  $settlement,
+        RefundHandler              $refund,
+        SmsHandler                 $sms,
         ComplianceScreeningHandler $compliance,
-        ReconciliationHandler     $reconciliation,
+        ReconciliationHandler      $reconciliation,
+        RateFetchHandler           $rateFetch,
     ) {
         $this->handlers = [
             $disbursement,
@@ -25,6 +26,7 @@ class OutboxProcessor
             $sms,
             $compliance,
             $reconciliation,
+            $rateFetch,
         ];
     }
 
