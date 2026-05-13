@@ -24,6 +24,10 @@ class TerraPayPartner implements PartnerInterface
         $this->password       = config('services.terrapay.password', '');
         $this->timeoutSeconds = config('services.terrapay.timeout', 30);
 
+    }
+
+    private function assertConfigured(): void
+    {
         if (empty($this->username) || empty($this->password)) {
             throw new \RuntimeException('TerraPay credentials are not configured.');
         }
@@ -31,6 +35,7 @@ class TerraPayPartner implements PartnerInterface
 
     public function disburse(Transaction $transaction): PartnerResult
     {
+        $this->assertConfigured();
         $startTime = microtime(true);
         $recipient = $transaction->recipient;
         $sender    = $transaction->sender;
@@ -131,6 +136,7 @@ class TerraPayPartner implements PartnerInterface
 
     public function checkStatus(string $partnerReference): PartnerResult
     {
+        $this->assertConfigured();
         $startTime = microtime(true);
 
         try {
