@@ -46,10 +46,17 @@ class RecipientController extends Controller
             $data['phone_hash'] = hash('sha256', $phone);
         }
 
-        // Reuse existing recipient if same mobile_number already exists for this user
-        $existing = $request->user()->recipients()
-            ->where('mobile_number', $data['mobile_number'] ?? null)
-            ->first();
+        // Reuse existing recipient if same identifier already exists for this user
+        $existing = null;
+        if (($data['payment_method'] ?? '') === 'wallet_transfer' && !empty($data['wallet_account'])) {
+            $existing = $request->user()->recipients()
+                ->where('wallet_account', $data['wallet_account'])
+                ->first();
+        } elseif (!empty($data['mobile_number'])) {
+            $existing = $request->user()->recipients()
+                ->where('mobile_number', $data['mobile_number'])
+                ->first();
+        }
 
         if ($existing) {
             $existing->update($data);
