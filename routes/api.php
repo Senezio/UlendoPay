@@ -62,6 +62,7 @@ Route::prefix('v1')->group(function () {
 
     // Fee calculator
     Route::get('/calculator', [\App\Http\Controllers\Api\CalculatorController::class, 'calculate']);
+    Route::get('/corridors', [\App\Http\Controllers\Api\CorridorController::class, 'corridors']);
 
     // ── Authenticated routes ─────────────────────────────────────────────────
     Route::middleware('auth:sanctum')->group(function () {

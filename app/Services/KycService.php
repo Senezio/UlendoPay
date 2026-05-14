@@ -114,6 +114,7 @@ class KycService
         $requestedTier = $record->requested_tier ?? \App\Models\TransferTier::where('is_active', true)->orderByDesc('level')->value('name') ?? 'verified';
         $user = $record->user;
         $user->kyc_status = 'verified';
+        $user->kyc_verified_at = now();
         $user->tier       = $requestedTier;
         if ($record->date_of_birth) $user->date_of_birth = $record->date_of_birth;
         if ($record->gender)        $user->gender        = $record->gender;

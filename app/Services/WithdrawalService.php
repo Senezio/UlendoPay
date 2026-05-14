@@ -47,7 +47,7 @@ class WithdrawalService
             countryCode:    $user->country_code ?? $this->currencyToCountry($wallet->currency_code),
         );
 
-        return $this->resolveHandler($context)->handle();
+        return $this->resolveHandler($context)->handle($context);
     }
 
     public function initiateBank(
@@ -73,7 +73,7 @@ class WithdrawalService
             countryCode:       $countryCode,
         );
 
-        return $this->resolveHandler($context)->handle();
+        return $this->resolveHandler($context)->handle($context);
     }
 
     public function handleWebhook(array $payload): void
