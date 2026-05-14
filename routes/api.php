@@ -186,6 +186,12 @@ Route::prefix('v1')->group(function () {
             Route::get('/partners/health',        [PartnerAdminController::class, 'partnerHealth']);
             Route::post('/partners/{id}/toggle',  [PartnerAdminController::class, 'partnerToggle'])
                 ->middleware('admin:super_admin');
+            Route::get('/corridors/available-pairs', [PartnerAdminController::class, 'availablePairs'])
+                ->middleware('admin:super_admin');
+            Route::post('/corridors',                 [PartnerAdminController::class, 'corridorCreate'])
+                ->middleware('admin:super_admin');
+            Route::delete('/corridors/{id}',          [PartnerAdminController::class, 'corridorDelete'])
+                ->middleware('admin:super_admin');
             Route::put('/corridors/{id}',         [PartnerAdminController::class, 'corridorUpdate'])
                 ->middleware('admin:super_admin');
             Route::post('/corridors/{id}/toggle', [PartnerAdminController::class, 'corridorToggle'])

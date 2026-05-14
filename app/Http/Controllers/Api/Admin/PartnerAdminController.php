@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\DisbursementAttempt;
+use App\Models\ExchangeRate;
 use App\Models\Partner;
 use App\Models\PartnerCorridor;
 use Illuminate\Http\JsonResponse;
@@ -96,6 +97,81 @@ class PartnerAdminController extends Controller
         return response()->json(['message' => 'Partner updated.', 'is_active' => $partner->is_active]);
     }
 
+    public function availablePairs(): JsonResponse
+    {
+        $existingPairs = PartnerCorridor::select('from_currency', 'to_currency')
+            ->get()
+            ->map(fn($c) => "{$c->from_currency}_{$c->to_currency}")
+            ->toArray();
+
+        $pairs = ExchangeRate::select('from_currency', 'to_currency')
+            ->where('is_active', true)
+            ->where('expires_at', '>', now())
+            ->distinct()
+            ->get()
+            ->filter(fn($r) => ! in_array("{$r->from_currency}_{$r->to_currency}", $existingPairs))
+            ->map(fn($r) => [
+                'from_currency' => $r->from_currency,
+                'to_currency'   => $r->to_currency,
+            ])
+            ->values();
+
+        $partners = Partner::active()->select('id', 'name', 'code', 'type')->get();
+
+        return response()->json(['pairs' => $pairs, 'partners' => $partners]);
+    }
+
+    public function corridorCreate(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'partner_id'    => 'required|integer|exists:partners,id',
+            'from_currency' => 'required|string|size:3',
+            'to_currency'   => 'required|string|size:3|different:from_currency',
+            'min_amount'    => 'required|numeric|min:0',
+            'max_amount'    => 'required|numeric|gt:min_amount',
+            'priority'      => 'sometimes|integer|min:1',
+            'fee_percent'   => 'sometimes|numeric|min:0|max:100',
+            'fee_flat'      => 'sometimes|numeric|min:0',
+        ]);
+
+        $rateExists = ExchangeRate::where('from_currency', $data['from_currency'])
+            ->where('to_currency', $data['to_currency'])
+            ->where('is_active', true)
+            ->where('expires_at', '>', now())
+            ->exists();
+
+        if (! $rateExists) {
+            return response()->json([
+                'message' => 'No active exchange rate exists for this currency pair.',
+            ], 422);
+        }
+
+        $alreadyPaired = PartnerCorridor::where('from_currency', $data['from_currency'])
+            ->where('to_currency', $data['to_currency'])
+            ->exists();
+
+        if ($alreadyPaired) {
+            return response()->json([
+                'message' => 'A corridor for this currency pair already exists.',
+            ], 422);
+        }
+
+        $corridor = PartnerCorridor::create($data);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'corridor.created',
+            'entity_type' => 'PartnerCorridor',
+            'entity_id'   => $corridor->id,
+            'new_values'  => $data,
+        ]);
+
+        return response()->json([
+            'message'  => 'Corridor created.',
+            'corridor' => $corridor->load('partner'),
+        ], 201);
+    }
+
     public function corridorUpdate(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
@@ -135,5 +211,26 @@ class PartnerAdminController extends Controller
         ]);
 
         return response()->json(['message' => 'Corridor updated.', 'is_active' => $corridor->is_active]);
+    }
+
+    public function corridorDelete(Request $request, int $id): JsonResponse
+    {
+        $corridor = PartnerCorridor::findOrFail($id);
+
+        AuditLog::create([
+            'user_id'     => $request->user()->id,
+            'action'      => 'corridor.deleted',
+            'entity_type' => 'PartnerCorridor',
+            'entity_id'   => $corridor->id,
+            'new_values'  => [
+                'from_currency' => $corridor->from_currency,
+                'to_currency'   => $corridor->to_currency,
+                'partner_id'    => $corridor->partner_id,
+            ],
+        ]);
+
+        $corridor->delete();
+
+        return response()->json(['message' => 'Corridor deleted.']);
     }
 }
