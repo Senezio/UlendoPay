@@ -9,6 +9,10 @@ class Partner extends Model
         'timeout_seconds','max_retries','retry_delay_seconds',
         'success_rate','avg_response_time_ms','is_active'
     ];
+    protected $hidden = [
+        'api_config',
+        'api_config_encrypted',
+    ];
     protected $casts = [
         'api_config' => 'encrypted:array', // encrypted at rest
         'is_active'  => 'boolean',
