@@ -80,15 +80,17 @@ class RateLockController extends Controller
             'locked_rate'      => $rate->rate,
             'fee_percent'      => $feePercent,
             'fee_flat'         => $feeFlat,
-            'guarantee_percent' => $guaranteePercent ?? 0.005,
+            'guarantee_percent' => $guaranteePercent ?? \App\Services\Transfers\FeeCalculator::DEFAULT_GUARANTEE_PERCENT,
             'send_amount'      => (float) $data['send_amount'],
             'status'           => 'active',
             'expires_at'       => Carbon::now()->addMinutes(self::LOCK_MINUTES),
         ]);
 
-        $sendAmount    = (float) $data['send_amount'];
-        $feeAmount     = round($sendAmount * ($lock->fee_percent / 100) + $lock->fee_flat, 2);
-        $receiveAmount = round(($sendAmount - $feeAmount) * $lock->locked_rate, 2);
+        $sendAmount    = (string) $data['send_amount'];
+        $feePercent    = bcdiv((string)$lock->fee_percent, '100', 10);
+        $percentFee    = bcmul($sendAmount, $feePercent, 6);
+        $feeAmount     = bcadd($percentFee, (string)$lock->fee_flat, 6);
+        $receiveAmount = bcmul(bcsub($sendAmount, $feeAmount, 6), (string)$lock->locked_rate, 6);
 
         return response()->json([
             'rate_lock' => [

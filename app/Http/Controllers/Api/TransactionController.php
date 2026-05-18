@@ -29,7 +29,7 @@ class TransactionController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        if (abs((float) $data['send_amount'] - (float) $rateLock->send_amount) > 0.01) {
+        if (bccomp((string)$data['send_amount'], (string)$rateLock->send_amount, 2) !== 0) {
             return response()->json([
                 'message' => 'Send amount does not match the locked rate. Please get a new quote.',
             ], 422);

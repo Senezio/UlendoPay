@@ -33,21 +33,23 @@ class WithdrawalService
         string $mobileOperator,
         float  $amount
     ): Withdrawal {
-        $wallet = $user->wallets()->where('status', 'active')->firstOrFail();
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($user, $phoneNumber, $mobileOperator, $amount) {
+            $wallet = $user->wallets()->where('status', 'active')->lockForUpdate()->firstOrFail();
 
-        $this->guardBalance($user, $wallet->currency_code, $amount);
+            $this->guardBalance($user, $wallet->currency_code, $amount);
 
-        $context = new WithdrawalContext(
-            user:           $user,
-            currency:       $wallet->currency_code,
-            amount:         $amount,
-            method:         'mobile_money',
-            phoneNumber:    $phoneNumber,
-            mobileOperator: $mobileOperator,
-            countryCode:    $user->country_code ?? $this->currencyToCountry($wallet->currency_code),
-        );
+            $context = new WithdrawalContext(
+                user:           $user,
+                currency:       $wallet->currency_code,
+                amount:         $amount,
+                method:         'mobile_money',
+                phoneNumber:    $phoneNumber,
+                mobileOperator: $mobileOperator,
+                countryCode:    $user->country_code ?? $this->currencyToCountry($wallet->currency_code),
+            );
 
-        return $this->resolveHandler($context)->handle($context);
+            return $this->resolveHandler($context)->handle($context);
+        });
     }
 
     public function initiateBank(
@@ -58,22 +60,24 @@ class WithdrawalService
         string $countryCode,
         float  $amount
     ): Withdrawal {
-        $wallet = $user->wallets()->where('status', 'active')->firstOrFail();
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($user, $bankAccountNumber, $bankBranchCode, $bankName, $countryCode, $amount) {
+            $wallet = $user->wallets()->where('status', 'active')->lockForUpdate()->firstOrFail();
 
-        $this->guardBalance($user, $wallet->currency_code, $amount);
+            $this->guardBalance($user, $wallet->currency_code, $amount);
 
-        $context = new WithdrawalContext(
-            user:              $user,
-            currency:          $wallet->currency_code,
-            amount:            $amount,
-            method:            'bank_transfer',
-            bankAccountNumber: $bankAccountNumber,
-            bankBranchCode:    $bankBranchCode,
-            bankName:          $bankName,
-            countryCode:       $countryCode,
-        );
+            $context = new WithdrawalContext(
+                user:              $user,
+                currency:          $wallet->currency_code,
+                amount:            $amount,
+                method:            'bank_transfer',
+                bankAccountNumber: $bankAccountNumber,
+                bankBranchCode:    $bankBranchCode,
+                bankName:          $bankName,
+                countryCode:       $countryCode,
+            );
 
-        return $this->resolveHandler($context)->handle($context);
+            return $this->resolveHandler($context)->handle($context);
+        });
     }
 
     public function handleWebhook(array $payload): void
@@ -116,7 +120,7 @@ class WithdrawalService
 
     private function guardBalance(User $user, string $currency, float $amount): void
     {
-        if ($amount < 1) {
+        if (bccomp((string)$amount, '1', 6) < 0) {
             throw new \RuntimeException("Minimum withdrawal amount is 1 {$currency}.");
         }
 
@@ -124,13 +128,14 @@ class WithdrawalService
             ->where('owner_type', User::class)
             ->where('type', 'user_wallet')
             ->where('currency_code', $currency)
+            ->lockForUpdate()
             ->firstOrFail();
 
-        $balance = (float) ($account->balance?->balance ?? 0);
+        $balance = $account->balance?->balance ?? '0';
 
-        if ($amount > $balance) {
+        if (bccomp((string)$amount, (string)$balance, 6) > 0) {
             throw new \RuntimeException(
-                "Insufficient balance. Available: {$currency} " . number_format($balance, 2)
+                "Insufficient balance. Available: {$currency} " . number_format((float)$balance, 2)
             );
         }
     }

@@ -121,9 +121,9 @@ class TransactionService
                     ->where('currency_code', $sendCurrency)
                     ->firstOrFail();
 
-                $balance = (float) $this->ledger->getBalance($senderAccount->id);
+                $balance = $this->ledger->getBalance($senderAccount->id);
 
-                if ($balance < $sendAmount) {
+                if (bccomp((string)$balance, (string)$sendAmount, 6) < 0) {
                     throw new \RuntimeException(
                         "Insufficient balance. Available: {$balance} {$sendCurrency}, " .
                         "Required: {$sendAmount} {$sendCurrency}"

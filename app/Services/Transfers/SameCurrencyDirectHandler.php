@@ -77,6 +77,14 @@ class SameCurrencyDirectHandler implements TransferHandlerInterface
             'status'                 => 'initiated',
         ]);
 
+        // Assert send and receive amounts match for same-currency transfers
+        if (bccomp((string)$ctx->sendAmount, (string)$ctx->receiveAmount, 6) !== 0) {
+            throw new \RuntimeException(
+                "Same-currency transfer amounts do not match. " .
+                "sendAmount: {$ctx->sendAmount}, receiveAmount: {$ctx->receiveAmount}"
+            );
+        }
+
         $group = $this->ledger->post(
             reference:   "TXN-{$ctx->reference}-DIRECT",
             type:        'transfer_initiation',
@@ -85,13 +93,13 @@ class SameCurrencyDirectHandler implements TransferHandlerInterface
                 [
                     'account_id'  => $senderAccount->id,
                     'type'        => 'debit',
-                    'amount'      => $ctx->sendAmount,
+                    'amount'      => bcadd((string)$ctx->sendAmount, '0', 6),
                     'description' => "Direct transfer {$ctx->reference}",
                 ],
                 [
                     'account_id'  => $recipientAccount->id,
                     'type'        => 'credit',
-                    'amount'      => $ctx->receiveAmount,
+                    'amount'      => bcadd((string)$ctx->receiveAmount, '0', 6),
                     'description' => "Received transfer {$ctx->reference}",
                 ],
             ],

@@ -12,6 +12,8 @@ use App\Services\TierService;
  */
 class FeeCalculator
 {
+    // Default guarantee contribution (0.5%) if not specified in rate lock or corridor config
+    const DEFAULT_GUARANTEE_PERCENT = '0.005';
     public function __construct(private TierService $tier) {}
 
     /**
@@ -19,8 +21,11 @@ class FeeCalculator
      */
     public function rawFee(float $amount, RateLock $rateLock): float
     {
-        $percentFee = round($amount * ($rateLock->fee_percent / 100), 6);
-        return round($percentFee + $rateLock->fee_flat, 6);
+        // percentFee = amount * (fee_percent / 100)
+        $percentFactor = bcdiv((string)$rateLock->fee_percent, '100', 6);
+        $percentFee    = bcmul((string)$amount, $percentFactor, 6);
+        
+        return (float) bcadd($percentFee, (string)$rateLock->fee_flat, 6);
     }
 
     /**
@@ -29,7 +34,7 @@ class FeeCalculator
     public function effectiveFee(float $amount, RateLock $rateLock, $sender): float
     {
         $raw = $this->rawFee($amount, $rateLock);
-        return $this->tier->effectiveFee($sender, $raw);
+        return (float) $this->tier->effectiveFee($sender, $raw);
     }
 
     /**
@@ -43,7 +48,7 @@ class FeeCalculator
         ?float  $guaranteePercent = null
     ): float {
         if ($guaranteePercent !== null) {
-            return round($amount * $guaranteePercent, 6);
+            return (float) bcmul((string)$amount, (string)$guaranteePercent, 6);
         }
 
         $corridor = \App\Models\PartnerCorridor::whereHas(
@@ -54,6 +59,10 @@ class FeeCalculator
             ->where('is_active', true)
             ->first();
 
-        return round($amount * ($corridor?->guarantee_percent ?? 0.005), 6);
+        $percent = ($corridor?->guarantee_percent !== null) 
+            ? (string) $corridor->guarantee_percent 
+            : self::DEFAULT_GUARANTEE_PERCENT;
+
+        return (float) bcmul((string)$amount, $percent, 6);
     }
 }

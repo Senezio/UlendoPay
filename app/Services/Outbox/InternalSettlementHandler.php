@@ -39,9 +39,7 @@ class InternalSettlementHandler implements OutboxHandlerInterface
 
         $sendCurrency    = $transaction->send_currency;
         $receiveCurrency = $transaction->receive_currency;
-        $escrowAmount    = (float) $transaction->send_amount
-                         - (float) $transaction->fee_amount
-                         - (float) $transaction->guarantee_contribution;
+        $escrowAmount = bcsub(bcsub((string)$transaction->send_amount, (string)$transaction->fee_amount, 6), (string)$transaction->guarantee_contribution, 6);
 
         $escrowAccount = Account::where('type', 'escrow')
             ->where('currency_code', $sendCurrency)
@@ -107,13 +105,13 @@ class InternalSettlementHandler implements OutboxHandlerInterface
                         [
                             'account_id'  => $receivePool->id,
                             'type'        => 'debit',
-                            'amount'      => (float) $transaction->receive_amount,
+                            'amount'      => bcadd((string)$transaction->receive_amount, '0', 6),
                             'description' => "Pool disbursement: {$reference}",
                         ],
                         [
                             'account_id'  => $recipientAccount->id,
                             'type'        => 'credit',
-                            'amount'      => (float) $transaction->receive_amount,
+                            'amount'      => bcadd((string)$transaction->receive_amount, '0', 6),
                             'description' => "Transfer received: {$reference}",
                         ],
                     ],

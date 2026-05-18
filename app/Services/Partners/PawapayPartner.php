@@ -283,7 +283,7 @@ class PawapayPartner implements PartnerInterface
 
             if ($response->successful()) {
                 $body = $response->json();
-                return $body[correspondent] ?? null;
+                return $body['correspondent'] ?? null;
             }
 
             return null;

@@ -54,33 +54,20 @@ class TierService
         $tierDiscount     = (float) $tier->fee_discount_percent;
         $referralDiscount = (float) $user->referral_discount_percent;
         $totalDiscount    = min($tierDiscount + $referralDiscount, 50);
-        return round($feeAmount * (1 - $totalDiscount / 100), 6);
+        return (float) bcmul((string)$feeAmount, bcsub('1', bcdiv((string)$totalDiscount, '100', 10), 10), 6);
     }
 
     /**
      * Convert a limit amount from the tier's limit_currency to the user's send currency.
+     * Delegates entirely to RateEngine which handles direct lookup and USD chaining.
      */
     public function convertLimit(float $amount, string $fromCurrency, string $toCurrency): float
     {
         if ($fromCurrency === $toCurrency) return $amount;
 
-        $rateEngine = app(\App\Services\RateEngine::class);
+        $rate = app(\App\Services\RateEngine::class)->getRate($fromCurrency, $toCurrency);
 
-        $direct = $rateEngine->getRate($fromCurrency, $toCurrency);
-        if ($direct) return round($amount * (float) $direct->rate, 6);
-
-        $toZar = $rateEngine->getRate($fromCurrency, 'ZAR');
-        $zarTo = $rateEngine->getRate('ZAR', $toCurrency);
-
-        if ($toZar && $zarTo) {
-            return round($amount * (float) $toZar->rate * (float) $zarTo->rate, 6);
-        }
-
-        $zarToUsd = $rateEngine->getRate('ZAR', $fromCurrency);
-        if ($zarToUsd && $zarTo) {
-            $usdToZar = 1 / (float) $zarToUsd->rate;
-            return round($amount * $usdToZar * (float) $zarTo->rate, 6);
-        }
+        if ($rate) return (float) bcmul((string)$amount, (string)$rate->rate, 6);
 
         Log::warning('[TierService] Could not convert limit', [
             'from' => $fromCurrency, 'to' => $toCurrency, 'amount' => $amount,
@@ -116,7 +103,7 @@ class TierService
             ->whereNotIn('status', ['refunded', 'failed'])
             ->sum('send_amount');
 
-        if (($dailyTotal + $amount) > $dailyLimit) {
+        if (bccomp(bcadd((string)$dailyTotal, (string)$amount, 6), (string)$dailyLimit, 6) > 0) {
             throw new \RuntimeException(
                 "This transfer would exceed your daily limit of {$currency} " .
                 number_format($dailyLimit, 2) .
@@ -131,7 +118,7 @@ class TierService
             ->whereNotIn('status', ['refunded', 'failed'])
             ->sum('send_amount');
 
-        if (($monthlyTotal + $amount) > $monthlyLimit) {
+        if (bccomp(bcadd((string)$monthlyTotal, (string)$amount, 6), (string)$monthlyLimit, 6) > 0) {
             throw new \RuntimeException(
                 "This transfer would exceed your monthly limit of {$currency} " .
                 number_format($monthlyLimit, 2) .
@@ -287,20 +274,20 @@ class TierService
 
         $feePercent = (float) $corridor->fee_percent;
         $feeFlat    = (float) $corridor->fee_flat;
-        $feeAmount  = round($amount * ($feePercent / 100) + $feeFlat, 6);
+        $feeAmount  = bcadd(bcmul((string)$amount, bcdiv((string)$feePercent, '100', 10), 6), (string)$feeFlat, 6);
 
         $discountPercent = 0;
         if ($user) {
             $tier            = $this->getTier($user);
             $discountPercent = min(
-                (float) $tier->fee_discount_percent + (float) $user->referral_discount_percent,
+                (float) bcadd((string)$tier->fee_discount_percent, (string)$user->referral_discount_percent, 6),
                 50
             );
-            $feeAmount = round($feeAmount * (1 - $discountPercent / 100), 6);
+            $feeAmount = bcmul((string)$feeAmount, bcsub('1', bcdiv((string)$discountPercent, '100', 10), 10), 6);
         }
 
-        $netAmount     = $amount - $feeAmount;
-        $receiveAmount = round($netAmount * (float) $rate->rate, 6);
+        $netAmount     = bcsub((string)$amount, (string)$feeAmount, 6);
+        $receiveAmount = bcmul((string)$netAmount, (string)$rate->rate, 6);
 
         return [
             'from_currency'    => $fromCurrency,

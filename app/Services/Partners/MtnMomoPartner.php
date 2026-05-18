@@ -47,7 +47,7 @@ class MtnMomoPartner implements PartnerInterface
             : $transaction->receive_currency;
 
         $payload = [
-            'amount'      => (string) $transaction->receive_amount,
+            'amount'      => number_format((float) $transaction->receive_amount, 2, '.', ''),
             'currency'    => $currency,
             'externalId'  => $transaction->reference_number,
             'payee'       => [
@@ -187,6 +187,13 @@ class MtnMomoPartner implements PartnerInterface
 
     private function getDisbursementToken(): string
     {
+        $cacheKey = 'mtn_momo_disbursement_token_' . md5($this->disbursementUserId);
+
+        $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
+        if ($cached) {
+            return $cached;
+        }
+
         $credentials = base64_encode("{$this->disbursementUserId}:{$this->disbursementApiKey}");
 
         $response = Http::withHeaders([
@@ -200,6 +207,12 @@ class MtnMomoPartner implements PartnerInterface
             );
         }
 
-        return $response->json('access_token');
+        $token     = $response->json('access_token');
+        $expiresIn = $response->json('expires_in', 3600);
+
+        // Cache for 90% of the token lifetime to avoid using an expiring token
+        \Illuminate\Support\Facades\Cache::put($cacheKey, $token, (int) ($expiresIn * 0.9));
+
+        return $token;
     }
 }

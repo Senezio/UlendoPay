@@ -61,6 +61,16 @@ class CrossCurrencyHandler implements TransferHandlerInterface
             'status'                 => 'initiated',
         ]);
 
+        // Assert split amounts balance before posting to ledger
+        $splitTotal = bcadd(bcadd((string)$ctx->escrowAmount, (string)$ctx->feeAmount, 6), (string)$ctx->guaranteeAmount, 6);
+        if (bccomp($splitTotal, (string)$ctx->sendAmount, 6) !== 0) {
+            throw new \RuntimeException(
+                "Transfer amount split does not balance. " .
+                "sendAmount: {$ctx->sendAmount}, " .
+                "escrow: {$ctx->escrowAmount} + fee: {$ctx->feeAmount} + guarantee: {$ctx->guaranteeAmount} = {$splitTotal}"
+            );
+        }
+
         $group = $this->ledger->post(
             reference:   "TXN-{$ctx->reference}-INIT",
             type:        'transfer_initiation',
@@ -69,25 +79,25 @@ class CrossCurrencyHandler implements TransferHandlerInterface
                 [
                     'account_id'  => $senderAccount->id,
                     'type'        => 'debit',
-                    'amount'      => $ctx->sendAmount,
+                    'amount'      => bcadd((string)$ctx->sendAmount, '0', 6),
                     'description' => "Transfer initiation {$ctx->reference}",
                 ],
                 [
                     'account_id'  => $escrowAccount->id,
                     'type'        => 'credit',
-                    'amount'      => $ctx->escrowAmount,
+                    'amount'      => bcadd((string)$ctx->escrowAmount, '0', 6),
                     'description' => "Escrow for {$ctx->reference}",
                 ],
                 [
                     'account_id'  => $feeAccount->id,
                     'type'        => 'credit',
-                    'amount'      => $ctx->feeAmount,
+                    'amount'      => bcadd((string)$ctx->feeAmount, '0', 6),
                     'description' => "Fee for {$ctx->reference}",
                 ],
                 [
                     'account_id'  => $guaranteeAccount->id,
                     'type'        => 'credit',
-                    'amount'      => $ctx->guaranteeAmount,
+                    'amount'      => bcadd((string)$ctx->guaranteeAmount, '0', 6),
                     'description' => "Guarantee contribution for {$ctx->reference}",
                 ],
             ],

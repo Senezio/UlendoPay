@@ -37,8 +37,8 @@ class RefundService
 
             $feeAmount       = $transaction->fee_amount;
             $guaranteeAmount = $transaction->guarantee_contribution;
-            $escrowAmount    = $transaction->send_amount - $feeAmount - $guaranteeAmount;
-            $refundAmount    = $transaction->send_amount; // full refund
+            $escrowAmount    = bcsub(bcsub((string)$transaction->send_amount, (string)$feeAmount, 6), (string)$guaranteeAmount, 6);
+            $refundAmount    = bcadd((string)$transaction->send_amount, '0', 6); // full refund
 
             $senderAccount = Account::where('owner_id', $transaction->sender_id)
                 ->where('owner_type', User::class)
@@ -67,25 +67,25 @@ class RefundService
                     [
                         'account_id'  => $escrowAccount->id,
                         'type'        => 'debit',
-                        'amount'      => $escrowAmount,
+                        'amount'      => bcadd((string)$escrowAmount, '0', 6),
                         'description' => "Refund escrow release: {$transaction->reference_number}",
                     ],
                     [
                         'account_id'  => $guaranteeAccount->id,
                         'type'        => 'debit',
-                        'amount'      => $guaranteeAmount,
+                        'amount'      => bcadd((string)$guaranteeAmount, '0', 6),
                         'description' => "Refund guarantee return: {$transaction->reference_number}",
                     ],
                     [
                         'account_id'  => $feeAccount->id,
                         'type'        => 'debit',
-                        'amount'      => $feeAmount,
+                        'amount'      => bcadd((string)$feeAmount, '0', 6),
                         'description' => "Refund fee return: {$transaction->reference_number}",
                     ],
                     [
                         'account_id'  => $senderAccount->id,
                         'type'        => 'credit',
-                        'amount'      => $refundAmount,
+                        'amount'      => bcadd((string)$refundAmount, '0', 6),
                         'description' => "Full refund received: {$transaction->reference_number}",
                     ],
                 ],
@@ -121,7 +121,7 @@ class RefundService
                     'transaction_id' => $transaction->id,
                     'type'           => 'transfer_refunded',
                     'reference'      => $transaction->reference_number,
-                    'amount'         => $refundAmount,
+                    'amount'      => bcadd((string)$refundAmount, '0', 6),
                     'currency'       => $sendCurrency,
                 ],
                 'status' => 'pending',

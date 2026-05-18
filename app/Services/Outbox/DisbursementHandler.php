@@ -120,7 +120,7 @@ class DisbursementHandler implements OutboxHandlerInterface
     private function creditRecipientWallet(Transaction $transaction): void
     {
         $receiveCurrency = $transaction->receive_currency;
-        $receiveAmount   = (float) $transaction->receive_amount;
+        $receiveAmount   = bcadd((string)$transaction->receive_amount, '0', 6);
         $reference       = $transaction->reference_number;
 
         $phoneHash     = hash('sha256', $transaction->recipient->mobile_number);
@@ -165,13 +165,13 @@ class DisbursementHandler implements OutboxHandlerInterface
                     [
                         'account_id'  => $poolAccount->id,
                         'type'        => 'debit',
-                        'amount'      => $receiveAmount,
+                        'amount'      => bcadd((string)$receiveAmount, '0', 6),
                         'description' => "Disbursement release: {$reference}",
                     ],
                     [
                         'account_id'  => $recipientAccount->id,
                         'type'        => 'credit',
-                        'amount'      => $receiveAmount,
+                        'amount'      => bcadd((string)$receiveAmount, '0', 6),
                         'description' => "Transfer received: {$reference}",
                     ],
                 ],
@@ -184,7 +184,7 @@ class DisbursementHandler implements OutboxHandlerInterface
                 'payload'        => [
                     'type'      => 'transfer_received',
                     'phone'     => $recipientUser->phone,
-                    'amount'    => $receiveAmount,
+                    'amount'      => bcadd((string)$receiveAmount, '0', 6),
                     'currency'  => $receiveCurrency,
                     'reference' => $reference,
                 ],
@@ -195,7 +195,7 @@ class DisbursementHandler implements OutboxHandlerInterface
 
         Log::info("[outbox] Recipient wallet credited", [
             'reference' => $reference,
-            'amount'    => $receiveAmount,
+            'amount'      => bcadd((string)$receiveAmount, '0', 6),
             'currency'  => $receiveCurrency,
         ]);
     }
@@ -213,7 +213,7 @@ class DisbursementHandler implements OutboxHandlerInterface
             'transaction_id'         => $transaction->id,
             'recipient_phone_hash'   => $phoneHash,
             'recipient_phone_masked' => $maskedPhone,
-            'amount'                 => (float) $transaction->receive_amount,
+            'amount'                 => bcadd((string)$transaction->receive_amount, '0', 6),
             'currency_code'          => $transaction->receive_currency,
             'status'                 => 'pending',
             'expires_at'             => now()->addHours(48),

@@ -51,7 +51,7 @@ class LedgerService
             $totalDebits  = $this->sumSide($entries, 'debit');
             $totalCredits = $this->sumSide($entries, 'credit');
 
-            if (bccomp(number_format((float)$totalDebits, 6, ".", ""), number_format((float)$totalCredits, 6, ".", ""), 6) !== 0) {
+            if (bccomp($totalDebits, $totalCredits, 6) !== 0) {
                 throw new \RuntimeException(
                     "Journal entries do not balance. " .
                     "Debits: {$totalDebits}, Credits: {$totalCredits}"
@@ -216,10 +216,14 @@ class LedgerService
         return $balance ? (string)$balance->balance : '0.000000';
     }
 
-    private function sumSide(array $entries, string $side): float
+    private function sumSide(array $entries, string $side): string
     {
-        return collect($entries)
-            ->where('type', $side)
-            ->sum('amount');
+        $total = '0';
+        foreach ($entries as $entry) {
+            if ($entry['type'] === $side) {
+                $total = bcadd($total, (string) $entry['amount'], 6);
+            }
+        }
+        return $total;
     }
 }

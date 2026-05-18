@@ -69,13 +69,13 @@ class PendingClaimHandler implements TransferHandlerInterface
                 [
                     'account_id'  => $senderAccount->id,
                     'type'        => 'debit',
-                    'amount'      => $ctx->sendAmount,
+                    'amount'      => bcadd((string)$ctx->sendAmount, '0', 6),
                     'description' => "Transfer hold for unregistered recipient {$ctx->reference}",
                 ],
                 [
                     'account_id'  => $escrowAccount->id,
                     'type'        => 'credit',
-                    'amount'      => $ctx->sendAmount,
+                    'amount'      => bcadd((string)$ctx->sendAmount, '0', 6),
                     'description' => "Held pending claim {$ctx->reference}",
                 ],
             ],

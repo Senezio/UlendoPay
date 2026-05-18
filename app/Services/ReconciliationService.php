@@ -70,23 +70,23 @@ class ReconciliationService
             ->groupBy('entry_type')
             ->pluck('total', 'entry_type');
 
-        $totalDebits  = (float) ($totals['debit']  ?? 0);
-        $totalCredits = (float) ($totals['credit'] ?? 0);
+        $totalDebits  = (string) ($totals['debit']  ?? '0');
+        $totalCredits = (string) ($totals['credit'] ?? '0');
 
         // Computed balance depends on normal balance convention
         $computedBalance = $account->normal_balance === 'debit'
-            ? $totalDebits - $totalCredits
-            : $totalCredits - $totalDebits;
+            ? bcsub($totalDebits, $totalCredits, 6)
+            : bcsub($totalCredits, $totalDebits, 6);
 
         // Expected balance = running balance from account_balances table
         $accountBalance = DB::table('account_balances')
             ->where('account_id', $account->id)
             ->first();
 
-        $expectedBalance = $accountBalance ? (float) $accountBalance->balance : 0.0;
+        $expectedBalance = $accountBalance ? (string) $accountBalance->balance : '0.000000';
 
-        $variance = round($computedBalance - $expectedBalance, 6);
-        $status   = abs($variance) < 0.000001 ? 'matched' : 'mismatch';
+        $variance = bcsub($computedBalance, $expectedBalance, 6);
+        $status   = bccomp($variance, '0', 6) === 0 ? 'matched' : 'mismatch';
 
         if ($status === 'mismatch') {
             Log::warning('[Reconciliation] Variance detected', [

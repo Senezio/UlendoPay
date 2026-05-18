@@ -31,6 +31,7 @@ class FraudDetectionService
     const SCORE_SANCTIONS_BLOCKED = 100; // definitive sanctions match — always flag
     const SCORE_SANCTIONS_FLAGGED = 80;  // probable sanctions match — high risk
     const SCORE_SCREEN_STALE      = 20;  // last screen > 25hrs ago — nightly job missed
+    const SCORE_SCREEN_MISSING    = 40;  // no screen on record at all — user was never screened
 
     /**
      * Analyse a pending transaction for fraud signals.
@@ -82,7 +83,7 @@ class FraudDetectionService
             $dailyLimit = PHP_INT_MAX; // fallback: no limit if tier not found
         }
 
-        if (($dailyTotal + $sendAmount) > $dailyLimit) {
+        if (bccomp(bcadd((string)$dailyTotal, (string)$sendAmount, 6), (string)$dailyLimit, 6) > 0) {
             $triggeredRules[] = [
                 'rule'    => 'daily_limit',
                 'detail'  => "Daily total would reach " . number_format($dailyTotal + $sendAmount, 2) . " {$sendCurrency}, tier limit is " . number_format($dailyLimit, 2),
@@ -171,9 +172,9 @@ class FraudDetectionService
             $triggeredRules[] = [
                 'rule'   => 'screen_missing',
                 'detail' => 'No compliance screen found for this user.',
-                'score'  => self::SCORE_SCREEN_STALE,
+                'score'  => self::SCORE_SCREEN_MISSING,
             ];
-            $totalScore += self::SCORE_SCREEN_STALE;
+            $totalScore += self::SCORE_SCREEN_MISSING;
         }
 
         return [
