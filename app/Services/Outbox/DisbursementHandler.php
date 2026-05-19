@@ -194,13 +194,6 @@ class DisbursementHandler implements OutboxHandlerInterface
                 description: "Wallet credit after disbursement: {$reference}"
             );
 
-            SendPushNotification::dispatch(
-                $recipientUser->id,
-                'Money Received',
-                'You have received ' . $receiveAmount . ' ' . $receiveCurrency . '. Reference: ' . $reference,
-                ['type' => 'transfer_received', 'reference' => $reference]
-            );
-
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
                 'transaction_id' => $transaction->id,
@@ -215,6 +208,13 @@ class DisbursementHandler implements OutboxHandlerInterface
                 'next_attempt_at' => now(),
             ]);
         });
+
+        SendPushNotification::dispatch(
+            $recipientUser->id,
+            'Money Received',
+            'You have received ' . $receiveAmount . ' ' . $receiveCurrency . '. Reference: ' . $reference,
+            ['type' => 'transfer_received', 'reference' => $reference]
+        );
 
         Log::info("[outbox] Recipient wallet credited", [
             'reference' => $reference,

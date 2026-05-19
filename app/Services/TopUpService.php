@@ -383,13 +383,6 @@ class TopUpService
                 ],
             ]);
 
-            SendPushNotification::dispatch(
-                $topUp->user_id,
-                'Top-Up Confirmed',
-                'Your top-up of ' . $topUp->amount . ' ' . $currency . ' has been confirmed.',
-                ['type' => 'topup_completed', 'reference' => $topUp->reference]
-            );
-
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
                 'transaction_id' => null,
@@ -410,6 +403,13 @@ class TopUpService
                 'provider'  => $topUp->provider,
             ]);
         });
+
+        SendPushNotification::dispatch(
+            $topUp->user_id,
+            'Top-Up Confirmed',
+            'Your top-up of ' . $topUp->amount . ' ' . $topUp->currency_code . ' has been confirmed.',
+            ['type' => 'topup_completed', 'reference' => $topUp->reference]
+        );
     }
 
     public function getAvailableOperators(string $currency): string

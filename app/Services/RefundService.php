@@ -116,13 +116,6 @@ class RefundService
                 ],
             ]);
 
-            SendPushNotification::dispatch(
-                $transaction->sender_id,
-                'Transfer Refunded',
-                'Your refund of ' . $refundAmount . ' ' . $sendCurrency . ' has been processed.',
-                ['type' => 'transfer_refunded', 'reference' => $transaction->reference_number]
-            );
-
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
                 'transaction_id' => $transaction->id,
@@ -144,6 +137,13 @@ class RefundService
                 'sender_id'      => $transaction->sender_id,
             ]);
         });
+
+        SendPushNotification::dispatch(
+            $transaction->sender_id,
+            'Transfer Refunded',
+            'Your refund of ' . $transaction->send_amount . ' ' . $transaction->send_currency . ' has been processed.',
+            ['type' => 'transfer_refunded', 'reference' => $transaction->reference_number]
+        );
     }
 
     private function assertRefundable(Transaction $transaction): void

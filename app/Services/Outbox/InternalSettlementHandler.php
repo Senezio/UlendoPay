@@ -166,13 +166,6 @@ class InternalSettlementHandler implements OutboxHandlerInterface
                 'completed_at' => now(),
             ]);
 
-            SendPushNotification::dispatch(
-                $transaction->sender_id,
-                'Transfer Complete',
-                'Your transfer ' . $transaction->reference_number . ' has been completed.',
-                ['type' => 'transfer_completed', 'reference' => $transaction->reference_number]
-            );
-
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
                 'transaction_id' => $transaction->id,
@@ -184,6 +177,13 @@ class InternalSettlementHandler implements OutboxHandlerInterface
                 'next_attempt_at' => now(),
             ]);
         });
+
+        SendPushNotification::dispatch(
+            $transaction->sender_id,
+            'Transfer Complete',
+            'Your transfer ' . $transaction->reference_number . ' has been completed.',
+            ['type' => 'transfer_completed', 'reference' => $transaction->reference_number]
+        );
 
         return "Internal settlement complete: {$transaction->reference_number}";
     }
