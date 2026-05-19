@@ -10,6 +10,8 @@ use App\Models\User;
 use App\Services\LedgerService;
 use App\Services\Outbox\Contracts\OutboxHandlerInterface;
 use App\Services\PartnerService;
+use App\Jobs\SendPushNotification;
+
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -73,6 +75,13 @@ class DisbursementHandler implements OutboxHandlerInterface
             'status' => 'pending',
         ]);
 
+        SendPushNotification::dispatch(
+            $transaction->sender_id,
+            'Transfer Complete',
+            'Your transfer ' . $transaction->reference_number . ' has been completed.',
+            ['type' => 'transfer_completed', 'reference' => $transaction->reference_number]
+        );
+
         return "Disbursed {$transaction->reference_number} via partner ref: {$result->partnerReference}";
     }
 
@@ -94,6 +103,13 @@ class DisbursementHandler implements OutboxHandlerInterface
         }
 
         $transaction->update(['status' => 'failed']);
+
+        SendPushNotification::dispatch(
+            $transaction->sender_id,
+            'Transfer Failed',
+            'Your transfer ' . $transaction->reference_number . ' failed and will be refunded.',
+            ['type' => 'transfer_failed', 'reference' => $transaction->reference_number]
+        );
 
         $alreadyQueued = OutboxEvent::where('event_type', 'refund_requested')
             ->where('transaction_id', $transactionId)
@@ -176,6 +192,13 @@ class DisbursementHandler implements OutboxHandlerInterface
                     ],
                 ],
                 description: "Wallet credit after disbursement: {$reference}"
+            );
+
+            SendPushNotification::dispatch(
+                $recipientUser->id,
+                'Money Received',
+                'You have received ' . $receiveAmount . ' ' . $receiveCurrency . '. Reference: ' . $reference,
+                ['type' => 'transfer_received', 'reference' => $reference]
             );
 
             OutboxEvent::create([

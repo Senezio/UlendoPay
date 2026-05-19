@@ -10,6 +10,8 @@ use App\Models\User;
 use App\Services\LedgerService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\SendPushNotification;
+
 
 class RefundService
 {
@@ -113,6 +115,13 @@ class RefundService
                     'currency'      => $sendCurrency,
                 ],
             ]);
+
+            SendPushNotification::dispatch(
+                $transaction->sender_id,
+                'Transfer Refunded',
+                'Your refund of ' . $refundAmount . ' ' . $sendCurrency . ' has been processed.',
+                ['type' => 'transfer_refunded', 'reference' => $transaction->reference_number]
+            );
 
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',

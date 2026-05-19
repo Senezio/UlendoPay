@@ -11,6 +11,8 @@ use App\Services\LedgerService;
 use App\Services\Outbox\Contracts\OutboxHandlerInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\SendPushNotification;
+
 
 class InternalSettlementHandler implements OutboxHandlerInterface
 {
@@ -118,6 +120,13 @@ class InternalSettlementHandler implements OutboxHandlerInterface
                     description: "Wallet credit for {$reference}"
                 );
 
+                SendPushNotification::dispatch(
+                    $recipientUser->id,
+                    'Money Received',
+                    'You have received ' . $transaction->receive_amount . ' ' . $receiveCurrency . '. Reference: ' . $reference,
+                    ['type' => 'transfer_received', 'reference' => $reference]
+                );
+
                 OutboxEvent::create([
                     'event_type'     => 'sms_notification',
                     'transaction_id' => $transaction->id,
@@ -156,6 +165,13 @@ class InternalSettlementHandler implements OutboxHandlerInterface
                 'status'       => 'completed',
                 'completed_at' => now(),
             ]);
+
+            SendPushNotification::dispatch(
+                $transaction->sender_id,
+                'Transfer Complete',
+                'Your transfer ' . $transaction->reference_number . ' has been completed.',
+                ['type' => 'transfer_completed', 'reference' => $transaction->reference_number]
+            );
 
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',

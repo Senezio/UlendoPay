@@ -11,6 +11,8 @@ use App\Services\MtnMomoService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\SendPushNotification;
+
 use Illuminate\Support\Str;
 
 class TopUpService
@@ -291,6 +293,13 @@ class TopUpService
                 'failed_at'      => now(),
             ]);
 
+            SendPushNotification::dispatch(
+                $topUp->user_id,
+                'Top-Up Failed',
+                'Your top-up of ' . $topUp->amount . ' ' . $topUp->currency_code . ' could not be processed.',
+                ['type' => 'topup_failed', 'reference' => $topUp->reference]
+            );
+
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
                 'transaction_id' => null,
@@ -373,6 +382,13 @@ class TopUpService
                     'provider'  => $topUp->provider,
                 ],
             ]);
+
+            SendPushNotification::dispatch(
+                $topUp->user_id,
+                'Top-Up Confirmed',
+                'Your top-up of ' . $topUp->amount . ' ' . $currency . ' has been confirmed.',
+                ['type' => 'topup_completed', 'reference' => $topUp->reference]
+            );
 
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',

@@ -9,6 +9,8 @@ use App\Models\Withdrawal;
 use App\Services\LedgerService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\SendPushNotification;
+
 
 class WithdrawalWebhookHandler
 {
@@ -55,6 +57,13 @@ class WithdrawalWebhookHandler
         } elseif (in_array($status, $this->failedStatuses)) {
             $reason = $payload['rejectionReason']['rejectionCode'] ?? $status;
             $this->refundHandler->refundWallet($withdrawal, $reason);
+
+            SendPushNotification::dispatch(
+                $withdrawal->user_id,
+                'Withdrawal Failed',
+                'Your withdrawal of ' . $withdrawal->amount . ' ' . $withdrawal->currency_code . ' could not be processed.',
+                ['type' => 'withdrawal_failed', 'reference' => $withdrawal->reference]
+            );
 
             OutboxEvent::create([
                 'event_type'     => 'sms_notification',
@@ -115,6 +124,13 @@ class WithdrawalWebhookHandler
                 'completed_at' => now(),
             ]);
         });
+
+        SendPushNotification::dispatch(
+            $withdrawal->user_id,
+            'Withdrawal Complete',
+            'Your withdrawal of ' . $withdrawal->amount . ' ' . $withdrawal->currency_code . ' has been processed.',
+            ['type' => 'withdrawal_completed', 'reference' => $withdrawal->reference]
+        );
 
         OutboxEvent::create([
             'event_type'     => 'sms_notification',
