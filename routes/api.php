@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\RecipientController;
 use App\Http\Controllers\Api\RateLockController;
 use App\Http\Controllers\Api\TransactionController;
+use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\KycController;
 use App\Http\Controllers\Api\TopUpController;
 use App\Http\Controllers\Api\WithdrawalController;
@@ -135,6 +136,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/transactions',            [TransactionController::class, 'store']);
         Route::get('/transactions',             [TransactionController::class, 'index']);
         Route::get('/transactions/{reference}', [TransactionController::class, 'show']);
+
+        // Device tokens
+        Route::post('/device-tokens',    [DeviceTokenController::class, 'store']);
+        Route::delete('/device-tokens',  [DeviceTokenController::class, 'destroy']);
 
         // ── Admin routes ─────────────────────────────────────────────────────
         Route::prefix('admin')->middleware('admin')->group(function () {
