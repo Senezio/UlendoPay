@@ -49,6 +49,11 @@ class NotificationService
 
     private function dispatch(array $tokens, string $title, string $message, array $data): void
     {
+        if (empty($this->appId) || empty($this->apiKey)) {
+            Log::debug('OneSignal credentials not configured — skipping push notification.');
+            return;
+        }
+
         try {
             $response = Http::withHeaders([
                 'Authorization' => 'Key ' . $this->apiKey,
