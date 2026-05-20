@@ -71,25 +71,49 @@ class WithdrawalController extends Controller
     }
 
     /**
-     * Initiate a bank transfer withdrawal via TerraPay.
+     * Initiate a bank transfer withdrawal.
+     * Accepts either a saved bank_account_id or manual bank details.
      */
     public function initiateBank(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'bank_account_number' => 'required|string|max:50',
-            'bank_branch_code'    => 'required|string|max:20',
-            'bank_name'           => 'required|string|max:100',
-            'country_code'        => 'required|string|size:3',
-            'amount'              => 'required|numeric|min:1',
+            'amount' => 'required|numeric|min:1',
         ]);
+
+        $bankAccountId     = $request->input('bank_account_id');
+        $bankAccountNumber = null;
+        $bankBranchCode    = null;
+        $bankName          = null;
+        $countryCode       = null;
+
+        if ($bankAccountId) {
+            $bankAccount       = $request->user()->bankAccounts()
+                ->where('is_active', true)
+                ->findOrFail($bankAccountId);
+            $bankAccountNumber = $bankAccount->getPlainAccountNumber();
+            $bankBranchCode    = $bankAccount->branch_code ?? '';
+            $bankName          = $bankAccount->bank_name;
+            $countryCode       = $bankAccount->country_code;
+        } else {
+            $manual            = $request->validate([
+                'bank_account_number' => 'required|string|max:50',
+                'bank_branch_code'    => 'required|string|max:20',
+                'bank_name'           => 'required|string|max:100',
+                'country_code'        => 'required|string|size:3',
+            ]);
+            $bankAccountNumber = $manual['bank_account_number'];
+            $bankBranchCode    = $manual['bank_branch_code'];
+            $bankName          = $manual['bank_name'];
+            $countryCode       = strtoupper($manual['country_code']);
+        }
 
         try {
             $withdrawal = $this->withdrawalService->initiateBank(
                 user:               $request->user(),
-                bankAccountNumber:  $data['bank_account_number'],
-                bankBranchCode:     $data['bank_branch_code'],
-                bankName:           $data['bank_name'],
-                countryCode:        strtoupper($data['country_code']),
+                bankAccountNumber:  $bankAccountNumber,
+                bankBranchCode:     $bankBranchCode,
+                bankName:           $bankName,
+                countryCode:        $countryCode,
                 amount:             (float) $data['amount'],
             );
 

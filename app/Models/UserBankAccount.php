@@ -32,4 +32,10 @@ class UserBankAccount extends Model
         $clean = preg_replace('/\D/', '', $number);
         return str_repeat('*', max(0, strlen($clean) - 4)) . substr($clean, -4);
     }
+
+    public function getPlainAccountNumber(): string
+    {
+        return Crypt::decryptString($this->account_number_encrypted);
+    }
 }
+
