@@ -40,6 +40,14 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
+        // Never expose database errors to API clients
+        $exceptions->render(function (\Illuminate\Database\QueryException $e, Request $request) {
+            if ($request->is("api/*") || $request->expectsJson()) {
+                \Illuminate\Support\Facades\Log::error("Database error", ["message" => $e->getMessage()]);
+                return response()->json(["message" => "A server error occurred. Please try again."], 500);
+            }
+        });
+
         // Return RuntimeException messages as friendly JSON 422 responses
         $exceptions->render(function (\RuntimeException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {

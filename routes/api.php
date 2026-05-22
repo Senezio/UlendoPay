@@ -79,6 +79,12 @@ Route::prefix('v1')->group(function () {
         Route::delete('/auth/account',       [AuthSessionController::class, 'closeAccount']);
         Route::get('/auth/audit-log',        [AuthSessionController::class, 'auditLog']);
 
+        // Biometric Authentication
+        Route::post('/auth/biometric/register',   [\App\Http\Controllers\Api\BiometricAuthController::class, 'register']);
+        Route::post('/auth/biometric/challenge',  [\App\Http\Controllers\Api\BiometricAuthController::class, 'challenge']);
+        Route::post('/auth/biometric/verify',     [\App\Http\Controllers\Api\BiometricAuthController::class, 'verify']);
+        Route::delete('/auth/biometric/device',   [\App\Http\Controllers\Api\BiometricAuthController::class, 'revoke']);
+
         // Two-Factor Authentication
         Route::get('/auth/2fa/setup',    [AuthTwoFactorController::class, 'setup']);
         Route::post('/auth/2fa/enable',  [AuthTwoFactorController::class, 'enable']);

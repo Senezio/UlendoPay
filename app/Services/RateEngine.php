@@ -100,7 +100,35 @@ class RateEngine
 
         // Fall back to USD chaining: fromCurrency → USD → toCurrency
         $base = $this->baseCurrency;
-        if ($fromCurrency === $base || $toCurrency === $base) return null;
+
+        // If one currency is the base, try the inverse rate before giving up.
+        // e.g. USD→MWK: if no direct rate exists, try MWK→USD and invert it.
+        if ($fromCurrency === $base || $toCurrency === $base) {
+            $inverse = ExchangeRate::where('from_currency', $toCurrency)
+                ->where('to_currency', $fromCurrency)
+                ->active()
+                ->latest('fetched_at')
+                ->first();
+
+            if ($inverse && $inverse->rate > 0) {
+                $invertedRate = round(1 / $inverse->rate, 8);
+                return ExchangeRate::updateOrCreate(
+                    ['from_currency' => $fromCurrency, 'to_currency' => $toCurrency, 'source' => 'INVERTED'],
+                    [
+                        'rate'         => $invertedRate,
+                        'inverse_rate' => $inverse->rate,
+                        'middle_rate'  => $invertedRate,
+                        'margin_percent' => 0,
+                        'is_active'    => true,
+                        'is_stale'     => false,
+                        'fetched_at'   => now(),
+                        'expires_at'   => now()->addHours($this->expiryHours),
+                    ]
+                );
+            }
+
+            return null;
+        }
 
         $fromToBase = ExchangeRate::where('from_currency', $fromCurrency)
             ->where('to_currency', $base)
