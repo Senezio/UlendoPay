@@ -2,11 +2,16 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('journal_entry_groups')) {
+            return;
+        }
+
         DB::statement("ALTER TABLE journal_entry_groups MODIFY COLUMN type ENUM(
             'transfer_initiation',
             'transfer_completion',
@@ -25,6 +30,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (!Schema::hasTable('journal_entry_groups')) {
+            return;
+        }
+
         DB::statement("ALTER TABLE journal_entry_groups MODIFY COLUMN type ENUM(
             'transfer_initiation',
             'transfer_completion',
