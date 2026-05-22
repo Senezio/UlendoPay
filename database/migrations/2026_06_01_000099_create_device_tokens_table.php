@@ -12,16 +12,16 @@ return new class extends Migration
             return;
         }
 
-        Schema::create('device_tokens', function (Blueprint ) {
-            ->id();
-            ->foreignId('user_id')->constrained()->cascadeOnDelete();
-            ->string('token', 512);
-            ->string('platform', 10)->default('android');
-            ->boolean('is_active')->default(true);
-            ->timestamps();
+        Schema::create('device_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('token', 512);
+            $table->string('platform', 10)->default('android');
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
 
-            ->unique(['user_id', 'token']);
-            ->index(['user_id', 'is_active']);
+            $table->unique(['user_id', 'token']);
+            $table->index(['user_id', 'is_active']);
         });
     }
 
