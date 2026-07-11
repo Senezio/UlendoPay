@@ -1,12 +1,15 @@
-<IfModule LiteSpeed>
-LsRecaptcha 0
+<IfModule Litespeed>
+    # Explicitly disable CAPTCHA verification for this entire directory
+    CacheVerify off
 </IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
     </IfModule>
 
     RewriteEngine On
+    RewriteBase /
 
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

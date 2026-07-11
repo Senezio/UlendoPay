@@ -112,3 +112,13 @@ Schedule::command('compliance:sync-lists')
     ->onFailure(function () {
         Log::error('[scheduler] compliance:sync-lists FAILED');
     });
+
+// ── Prune unverified registrations ───────────────────────────────────────────
+// Runs every 5 minutes — deletes unverified user registrations older than 5
+// minutes, freeing their phone/email for re-registration
+Schedule::command('users:prune-unverified')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onFailure(function () {
+        Log::error('[scheduler] users:prune-unverified FAILED');
+    });

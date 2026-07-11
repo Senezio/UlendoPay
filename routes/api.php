@@ -44,6 +44,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/reset-pin',       [AuthCredentialController::class, 'resetPin']);
         Route::post('/forgot-password', [AuthCredentialController::class, 'forgotPassword'])->middleware('throttle:otp');
         Route::post('/reset-password',  [AuthCredentialController::class, 'resetPassword']);
+        Route::post('/biometric/challenge', [\App\Http\Controllers\Api\BiometricAuthController::class, 'challenge']);
+        Route::post('/biometric/verify',    [\App\Http\Controllers\Api\BiometricAuthController::class, 'verify']);
     });
 
     Route::post('/contact', [\App\Http\Controllers\Api\PublicController::class, 'contact'])->middleware('throttle:6,1');
@@ -81,8 +83,6 @@ Route::prefix('v1')->group(function () {
 
         // Biometric Authentication
         Route::post('/auth/biometric/register',   [\App\Http\Controllers\Api\BiometricAuthController::class, 'register']);
-        Route::post('/auth/biometric/challenge',  [\App\Http\Controllers\Api\BiometricAuthController::class, 'challenge']);
-        Route::post('/auth/biometric/verify',     [\App\Http\Controllers\Api\BiometricAuthController::class, 'verify']);
         Route::delete('/auth/biometric/device',   [\App\Http\Controllers\Api\BiometricAuthController::class, 'revoke']);
 
         // Two-Factor Authentication
