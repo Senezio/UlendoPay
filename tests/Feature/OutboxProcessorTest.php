@@ -79,7 +79,7 @@ class OutboxProcessorTest extends TestCase
         ]);
     }
 
-    private function makeEscrowedTransaction(): Transaction
+    private function makeEscrowedTransaction(bool $recipientRegistered = false): Transaction
     {
         Account::firstOrCreate(['type' => 'escrow', 'currency_code' => 'MWK'], [
             'owner_id' => null, 'owner_type' => null,
@@ -144,6 +144,31 @@ class OutboxProcessorTest extends TestCase
             'payment_method' => 'mobile_money',
             'is_active'      => true,
         ]);
+
+        if ($recipientRegistered) {
+            $recipientUser = User::create([
+                'name'         => 'ZMW Recipient User',
+                'email'        => 'outbox-recipient@test.com',
+                'password'     => Hash::make('password', ['rounds' => 4]),
+                'country_code' => 'ZMB',
+                'kyc_status'   => 'verified',
+                'status'       => 'active',
+                'tier'         => 'basic',
+            ]);
+            $recipientUser->phone = '+260971200001';
+            $recipientUser->pin   = '1234';
+            $recipientUser->save();
+
+            Account::create([
+                'owner_id'       => $recipientUser->id,
+                'owner_type'     => User::class,
+                'type'           => 'user_wallet',
+                'currency_code'  => 'ZMW',
+                'code'           => 'OUTBOX-RECIPIENT-ZMW',
+                'normal_balance' => 'credit',
+                'is_active'      => true,
+            ]);
+        }
 
         return $this->transactions->initiate(
             'outbox-test-' . uniqid(),
@@ -218,7 +243,7 @@ class OutboxProcessorTest extends TestCase
     #[Test]
     public function internal_settlement_completes_cross_currency_transaction(): void
     {
-        $transaction = $this->makeEscrowedTransaction();
+        $transaction = $this->makeEscrowedTransaction(recipientRegistered: true);
         $this->assertEquals('escrowed', $transaction->status);
 
         Account::firstOrCreate(['code' => 'ZMW-POOL'], [
@@ -240,6 +265,37 @@ class OutboxProcessorTest extends TestCase
         $transaction->refresh();
         $this->assertEquals('completed', $transaction->status);
         $this->assertNotNull($transaction->completed_at);
+    }
+
+    #[Test]
+    public function internal_settlement_creates_pending_claim_for_unregistered_recipient(): void
+    {
+        $transaction = $this->makeEscrowedTransaction();
+        $this->assertEquals('escrowed', $transaction->status);
+
+        Account::firstOrCreate(['code' => 'ZMW-POOL'], [
+            'owner_id' => null, 'owner_type' => null,
+            'type' => 'system', 'currency_code' => 'ZMW',
+            'normal_balance' => 'credit', 'is_active' => true,
+        ]);
+        AccountBalance::firstOrCreate(
+            ['account_id' => Account::where('code', 'ZMW-POOL')->first()->id],
+            ['balance' => 999999, 'currency_code' => 'ZMW']
+        );
+
+        $event = OutboxEvent::where('event_type', 'internal_settlement')
+            ->where('transaction_id', $transaction->id)
+            ->firstOrFail();
+
+        $this->processor->process($event);
+
+        $transaction->refresh();
+        $this->assertEquals('pending_claim', $transaction->status);
+        $this->assertNull($transaction->completed_at);
+
+        $claim = PendingClaim::where('transaction_id', $transaction->id)->first();
+        $this->assertNotNull($claim);
+        $this->assertEquals('pending', $claim->status);
     }
 
     #[Test]
