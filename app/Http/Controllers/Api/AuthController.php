@@ -28,11 +28,13 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'method'   => 'required|in:phone_pin,email_password',
-            'phone'    => 'required_if:method,phone_pin|nullable|string',
-            'pin'      => 'required_if:method,phone_pin|nullable|string|size:4',
-            'email'    => 'required_if:method,email_password|nullable|email',
-            'password' => 'required_if:method,email_password|nullable|string',
+            'method'      => 'required|in:phone_pin,email_password',
+            'phone'       => 'required_if:method,phone_pin|nullable|string',
+            'pin'         => 'required_if:method,phone_pin|nullable|string|size:4',
+            'email'       => 'required_if:method,email_password|nullable|email',
+            'password'    => 'required_if:method,email_password|nullable|string',
+            'device_name' => 'nullable|string|max:255',
+            'platform'    => 'nullable|string|in:android,ios',
         ]);
 
         $throttleKey = "login:{$request->ip()}";
@@ -64,10 +66,18 @@ class AuthController extends Controller
             RateLimiter::clear($throttleKey);
             $this->rateLimiter->clear($throttleKey, 'login');
 
+            $tokenResult = $user->createToken('auth_token');
+            $tokenResult->accessToken->forceFill([
+                'device_name' => $data['device_name'] ?? null,
+                'platform'    => $data['platform'] ?? null,
+                'user_agent'  => $request->userAgent(),
+                'ip_address'  => $request->ip(),
+            ])->save();
+
             return response()->json([
                 'message'   => 'Login successful (Local Environment).',
                 'user'      => $this->formatUser($user),
-                'token'     => $user->createToken('auth_token')->plainTextToken,
+                'token'     => $tokenResult->plainTextToken,
                 'next_step' => 'dashboard',
             ]);
         }
@@ -100,8 +110,10 @@ class AuthController extends Controller
     public function verifyTotp(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'user_id' => 'required|integer|exists:users,id',
-            'code'    => 'required|string',
+            'user_id'     => 'required|integer|exists:users,id',
+            'code'        => 'required|string',
+            'device_name' => 'nullable|string|max:255',
+            'platform'    => 'nullable|string|in:android,ios',
         ]);
 
         $this->throttle("verify_totp:{$data['user_id']}", 5, 10);
@@ -114,18 +126,28 @@ class AuthController extends Controller
             ]);
         }
 
+        $tokenResult = $user->createToken('auth_token');
+        $tokenResult->accessToken->forceFill([
+            'device_name' => $data['device_name'] ?? null,
+            'platform'    => $data['platform'] ?? null,
+            'user_agent'  => $request->userAgent(),
+            'ip_address'  => $request->ip(),
+        ])->save();
+
         return response()->json([
             'message' => 'Login successful.',
             'user'    => $this->formatUser($user),
-            'token'   => $user->createToken('auth_token')->plainTextToken,
+            'token'   => $tokenResult->plainTextToken,
         ]);
     }
 
     public function verifyLogin(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'user_id' => 'required|integer|exists:users,id',
-            'otp'     => 'required|string|size:6',
+            'user_id'     => 'required|integer|exists:users,id',
+            'otp'         => 'required|string|size:6',
+            'device_name' => 'nullable|string|max:255',
+            'platform'    => 'nullable|string|in:android,ios',
         ]);
 
         $this->throttle("verify_login:{$data['user_id']}", 5, 10);
@@ -138,13 +160,24 @@ class AuthController extends Controller
             ]);
         }
 
-        $user->tokens()->where('name', 'mobile')->delete();
-
-        $token = $user->createToken(
+        // Each verified login now issues its own token rather than replacing
+        // any existing 'mobile' token, so a user can be signed in on multiple
+        // devices at once. Device name/platform come from the client
+        // (device_info_plus); falls back to null on older app versions that
+        // don't send them yet — sessions() still works, just without a
+        // friendly name for that entry.
+        $tokenResult = $user->createToken(
             'mobile',
             ['*'],
             now()->addHours(12)
-        )->plainTextToken;
+        );
+        $tokenResult->accessToken->forceFill([
+            'device_name' => $data['device_name'] ?? null,
+            'platform'    => $data['platform'] ?? null,
+            'user_agent'  => $request->userAgent(),
+            'ip_address'  => $request->ip(),
+        ])->save();
+        $token = $tokenResult->plainTextToken;
 
         $user->update(['last_login_at' => now()]);
 

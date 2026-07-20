@@ -155,9 +155,19 @@ class BiometricAuthController extends Controller
             ]);
         }
 
-        // Revoke existing mobile token and issue new one
-        $user->tokens()->where('name', 'mobile')->delete();
-        $token = $user->createToken('mobile', ['*'], now()->addHours(12))->plainTextToken;
+        // Issue a new token for this device without touching tokens from
+        // other devices, so biometric login on one phone doesn't sign out a
+        // session on another. Device name/platform reuse what was captured
+        // at biometric registration time for this device_id, rather than
+        // requiring the client to send it again here.
+        $tokenResult = $user->createToken('mobile', ['*'], now()->addHours(12));
+        $tokenResult->accessToken->forceFill([
+            'device_name' => $device->device_name,
+            'platform'    => $device->platform,
+            'user_agent'  => $request->userAgent(),
+            'ip_address'  => $request->ip(),
+        ])->save();
+        $token = $tokenResult->plainTextToken;
 
         $user->update(['last_login_at' => now()]);
 

@@ -52,6 +52,9 @@ class AuthSessionController extends Controller
             ->map(fn($t) => [
                 'id'           => $t->id,
                 'name'         => $t->name,
+                'device_name'  => $t->device_name,
+                'platform'     => $t->platform,
+                'ip_address'   => $t->ip_address,
                 'last_used_at' => $t->last_used_at,
                 'created_at'   => $t->created_at,
                 'is_current'   => $t->id === $currentTokenId,

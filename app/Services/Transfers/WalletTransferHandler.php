@@ -24,7 +24,12 @@ class WalletTransferHandler implements TransferHandlerInterface
 
     public function supports(TransactionContext $ctx): bool
     {
-        return $ctx->recipient->payment_method === 'wallet_transfer';
+        // Cross-currency wallet transfers need escrow + async settlement,
+        // which CrossCurrencyHandler already provides regardless of
+        // payment_method. This handler completes immediately with no
+        // conversion, so it must only claim same-currency wallet
+        // transfers.
+        return $ctx->isSameCurrency && $ctx->recipient->payment_method === 'wallet_transfer';
     }
 
     public function handle(TransactionContext $ctx): Transaction

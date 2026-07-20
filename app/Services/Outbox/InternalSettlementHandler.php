@@ -55,8 +55,24 @@ class InternalSettlementHandler implements OutboxHandlerInterface
             ->where('code', "{$receiveCurrency}-POOL")
             ->firstOrFail();
 
-        $phoneHash     = hash('sha256', $transaction->recipient->mobile_number);
-        $recipientUser = User::where('phone_hash', $phoneHash)->first();
+        if ($transaction->recipient->payment_method === 'wallet_transfer') {
+            $walletAccount = Account::where('code', $transaction->recipient->wallet_account)
+                ->where('type', 'user_wallet')
+                ->where('currency_code', $receiveCurrency)
+                ->first();
+
+            if (! $walletAccount) {
+                throw new \RuntimeException(
+                    "Wallet account {$transaction->recipient->wallet_account} not found or inactive."
+                );
+            }
+
+            $recipientUser = User::find($walletAccount->owner_id);
+            $phoneHash     = null;
+        } else {
+            $phoneHash     = hash('sha256', $transaction->recipient->mobile_number);
+            $recipientUser = User::where('phone_hash', $phoneHash)->first();
+        }
 
         DB::transaction(function () use (
             $transaction, $escrowAccount, $sendPool, $receivePool,
@@ -159,6 +175,23 @@ class InternalSettlementHandler implements OutboxHandlerInterface
                 Log::info("[outbox] Recipient not registered — PendingClaim created", [
                     'reference' => $reference,
                 ]);
+
+                $transaction->update(['status' => 'pending_claim']);
+
+                OutboxEvent::create([
+                    'event_type'     => 'sms_notification',
+                    'transaction_id' => $transaction->id,
+                    'payload'        => [
+                        'type'      => 'pending_claim',
+                        'reference' => $transaction->reference_number,
+                        'amount'    => $transaction->receive_amount,
+                        'currency'  => $receiveCurrency,
+                    ],
+                    'status'          => 'pending',
+                    'next_attempt_at' => now(),
+                ]);
+
+                return;
             }
 
             $transaction->update([
@@ -178,12 +211,14 @@ class InternalSettlementHandler implements OutboxHandlerInterface
             ]);
         });
 
-        SendPushNotification::dispatch(
-            $transaction->sender_id,
-            'Transfer Complete',
-            'Your transfer ' . $transaction->reference_number . ' has been completed.',
-            ['type' => 'transfer_completed', 'reference' => $transaction->reference_number]
-        );
+        if ($transaction->fresh()->status === 'completed') {
+            SendPushNotification::dispatch(
+                $transaction->sender_id,
+                'Transfer Complete',
+                'Your transfer ' . $transaction->reference_number . ' has been completed.',
+                ['type' => 'transfer_completed', 'reference' => $transaction->reference_number]
+            );
+        }
 
         return "Internal settlement complete: {$transaction->reference_number}";
     }

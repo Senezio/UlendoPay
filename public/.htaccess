@@ -1,6 +1,10 @@
-<IfModule Litespeed>
-    # Explicitly disable CAPTCHA verification for this entire directory
-    CacheVerify off
+<IfModule mod_security2.c>
+    SecRuleEngine Off
+</IfModule>
+
+<IfModule LiteSpeed>
+    RewriteEngine On
+    RewriteRule .* - [E=verifycaptcha:off,E=nolog:1]
 </IfModule>
 
 <IfModule mod_rewrite.c>

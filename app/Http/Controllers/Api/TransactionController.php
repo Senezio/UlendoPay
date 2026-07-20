@@ -141,17 +141,46 @@ class TransactionController extends Controller
                 DB::raw("'received' as direction"),
             ]);
 
+        // Received (wallet): recipient's wallet_account matches an Account this user owns
+        $receivedWallet = DB::table('transactions as t')
+            ->join('recipients as r', 'r.id', '=', 't.recipient_id')
+            ->join('users as s', 's.id', '=', 't.sender_id')
+            ->join('accounts as a', function ($join) use ($user) {
+                $join->on('a.code', '=', 'r.wallet_account')
+                     ->where('a.owner_id', $user->id)
+                     ->where('a.owner_type', \App\Models\User::class)
+                     ->where('a.type', 'user_wallet');
+            })
+            ->where('t.sender_id', '!=', $user->id)
+            ->where('r.payment_method', 'wallet_transfer')
+            ->select([
+                't.id',
+                't.reference_number',
+                't.status',
+                't.send_amount',
+                't.send_currency',
+                't.receive_amount',
+                't.receive_currency',
+                't.locked_rate',
+                't.fee_amount',
+                's.name as sender_name',
+                'r.full_name as recipient_name',
+                't.created_at',
+                't.completed_at',
+                DB::raw("'received' as direction"),
+            ]);
+
         // ── Get total count from Redis cache (60 second TTL) ─────────────────
         $cacheKey = "txn_count:{$user->id}";
-        $total    = Cache::remember($cacheKey, 60, function () use ($sent, $receivedMobile, $receivedBank) {
+        $total    = Cache::remember($cacheKey, 60, function () use ($sent, $receivedMobile, $receivedBank, $receivedWallet) {
             return DB::table(
-                $sent->union($receivedMobile)->union($receivedBank)
+                $sent->union($receivedMobile)->union($receivedBank)->union($receivedWallet)
             )->count();
         });
 
         // ── Paginate at DB level ─────────────────────────────────────────────
         $items = DB::table(
-                $sent->union($receivedMobile)->union($receivedBank)
+                $sent->union($receivedMobile)->union($receivedBank)->union($receivedWallet)
             )
             ->orderByDesc('created_at')
             ->orderByDesc('id') // tiebreaker for same-second transactions
@@ -187,6 +216,16 @@ class TransactionController extends Controller
                                         ->where('user_id', $user->id)
                                         ->where('payment_method', 'bank_transfer')
                                         ->whereNotNull('bank_account_number');
+                                });
+                         })
+                         ->orWhere(function ($q4) use ($user) {
+                             $q4->where('payment_method', 'wallet_transfer')
+                                ->whereIn('wallet_account', function ($sub) use ($user) {
+                                    $sub->select('code')
+                                        ->from('accounts')
+                                        ->where('owner_id', $user->id)
+                                        ->where('owner_type', \App\Models\User::class)
+                                        ->where('type', 'user_wallet');
                                 });
                          });
                   });
